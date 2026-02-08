@@ -31,6 +31,10 @@ MODELS = {
 }
 
 def main() -> None:
+  """
+  Main function to generate an image from a external prompting file.
+  """
+
   if len(sys.argv) < 2:
     print('Usage: python generateImage.py <promptFile.txt>')
     sys.exit(1)
@@ -44,7 +48,7 @@ def main() -> None:
 
   # Load the local model as defined in the configuration.
   # Simple example of pipeline call. Functions and names stored in dict to allow for easy switching.
-  # What ends up eing executed based on XL flag.
+  # What ends up being executed based on XL flag.
   # pipe = StableDiffusionXLPipeline.from_pretrained(
   #     'stabilityai/stable-diffusion-xl-base-1.0',
   #     cache_dir=MODEL_DIR,
@@ -85,6 +89,14 @@ def main() -> None:
 
 
 def loadPrompt(promptFile: Path) -> dict:
+  """
+  Parse the prompt file for prompt and exclusion prompting headers.
+
+  :param promptFile: External prompt file.
+  :type promptFile: Path
+  :return: Dictionary of the prompt and what will be use for exclusion / negatitive prompt.
+  :rtype: dict
+  """
 
   promptText = {
     'prompt': [],

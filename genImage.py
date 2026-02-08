@@ -23,6 +23,7 @@ if TYPE_CHECKING:
   from transformers import CLIPTokenizer
 
 XL = '--xl' in sys.argv
+VERBOSE = '--verbose' in sys.argv
 MAX_TOKENS = 77
 
 # Silence HTTP info messages
@@ -45,16 +46,17 @@ def main() -> None:
   # Set quiet mode for normal operation
   logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
-  configureQuietMode(isQuiet=True)
+  configureQuietMode(isVerbose=VERBOSE)
   from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
   from diffusers import StableDiffusionImg2ImgPipeline, StableDiffusionXLImg2ImgPipeline
   from diffusers.utils import logging as diffusersLogging
   from transformers import CLIPTokenizer
   from transformers.utils import logging as hfLogging
 
-  hfLogging.set_verbosity_error()
-  diffusersLogging.set_verbosity_error()
-  diffusersLogging.disable_progress_bar()
+  if not VERBOSE:
+    hfLogging.set_verbosity_error()
+    diffusersLogging.set_verbosity_error()
+    diffusersLogging.disable_progress_bar()
 
   MODELS = {
     'sd' : {
@@ -127,7 +129,7 @@ def main() -> None:
   pipeArgs = {
     'prompt': promptText,
     'num_inference_steps': 30,
-    'guidance_scale' : 7.5
+    'guidance_scale' : 8.0
   }
 
   # Append negative prompt argument if exists.
@@ -189,8 +191,8 @@ def tokenCount(text: str, tokenizer: CLIPTokenizer) -> int:
   return len(tokens["input_ids"])
 
 
-def configureQuietMode(isQuiet: bool = True) -> None:
-  if not isQuiet:
+def configureQuietMode(isVerbose: bool = False) -> None:
+  if isVerbose:
     return
 
   warnings.filterwarnings('ignore', category=UserWarning)

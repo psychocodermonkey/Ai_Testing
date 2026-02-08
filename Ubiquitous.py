@@ -8,6 +8,7 @@
 ........1.........2.........3.........4.........5.........6.........7.........8.........9.........0.........1.........2.........3..
 '''
 
+import os
 from pathlib import Path
 
 
@@ -91,6 +92,77 @@ def getModel(repoID: str = None, fileName: str = None, override: bool = False) -
   )
 
   return modelPath is not None
+
+
+def hfLogin() -> bool:
+  """Log in to hugging face from .env token."""
+  env = Path(__file__).parent / '.env'
+  if env.exists():
+    from dotenv import load_dotenv
+    from huggingface_hub import login
+    # Bring in secrets from environment file
+    load_dotenv()
+    login(token=os.getenv('HF_TOKEN'))
+  return "HF_TOKEN" in os.environ
+
+
+def loadPrompt(promptFile: Path) -> dict:
+  """
+  Parse the prompt file for prompt and exclusion prompting headers.
+
+  :param promptFile: External prompt file.
+  :type promptFile: Path
+  :return: Dictionary of the prompt and what will be use for exclusion / negatitive prompt.
+  :rtype: dict
+  """
+
+  promptText = {
+    'prompt': [],
+    'exclude': [],
+    'refine prompt': [],
+    'refine exclude': []
+  }
+
+  if not promptFile.exists():
+    raise FileNotFoundError(f'Prompt file not found: {promptFile}')
+
+  currentSection = None
+
+  # Get the text body so we can look for our appropriat esections.
+  text = promptFile.read_text(encoding='utf-8').strip()
+  for line in text.splitlines():
+    line = line.strip()
+
+    # Skip common comment lines.
+    if not line or line.startswith('#') or line.startswith('//') or line.startswith(';'):
+      continue
+
+    # Set what the current section is and then skip to the next line.
+    if line.lower() == '[prompt]':
+      currentSection = 'prompt'
+      continue
+
+    elif line.lower() == '[exclude]':
+      currentSection = 'exclude'
+      continue
+
+    elif line.lower() == '[refine prompt]':
+      currentSection = 'refine prompt'
+      continue
+
+    elif line.lower() == '[refine exclude]':
+      currentSection = 'refine exclude'
+      continue
+
+    # Append the line to the appropriate section.
+    if currentSection:
+      promptText[currentSection].append(line.strip())
+
+  # validate that we have prompt text. If exclude is missing we don't care we just won't use it.
+  if not promptText['prompt']:
+    raise ValueError('Prompt file contains no [prompt] section or is empty')
+
+  return promptText
 
 
 # Globals

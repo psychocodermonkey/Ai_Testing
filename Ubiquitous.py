@@ -9,6 +9,7 @@
 '''
 
 import os
+import contextlib
 from pathlib import Path
 
 
@@ -99,10 +100,10 @@ def hfLogin() -> bool:
   env = Path(__file__).parent / '.env'
   if env.exists():
     from dotenv import load_dotenv
-    from huggingface_hub import login
+    # from huggingface_hub import login
     # Bring in secrets from environment file
     load_dotenv()
-    login(token=os.getenv('HF_TOKEN'))
+    # login(token=os.getenv('HF_TOKEN'))
   return "HF_TOKEN" in os.environ
 
 
@@ -116,7 +117,7 @@ def loadPrompt(promptFile: Path) -> dict:
   :rtype: dict
   """
 
-  promptText = {
+  promptData = {
     'prompt': [],
     'exclude': [],
     'refine prompt': [],
@@ -156,13 +157,18 @@ def loadPrompt(promptFile: Path) -> dict:
 
     # Append the line to the appropriate section.
     if currentSection:
-      promptText[currentSection].append(line.strip())
+      promptData[currentSection].append(line.strip())
 
   # validate that we have prompt text. If exclude is missing we don't care we just won't use it.
-  if not promptText['prompt']:
+  if not promptData['prompt']:
     raise ValueError('Prompt file contains no [prompt] section or is empty')
 
-  return promptText
+  return promptData
+
+
+def genPromptString(lines: list[str]) -> str:
+  """Return a normalized comma separated line to use as a prompt."""
+  return ', '.join([line.strip() for line in lines if line.strip()])
 
 
 # Globals

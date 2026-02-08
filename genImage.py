@@ -17,7 +17,18 @@ from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
 from Ubiquitous import MODEL_DIR, OUTPUT_DIR
 
 XL = True
-
+MODELS = {
+  'sd' : {
+    'repo' : 'runwayml/stable-diffusion-v1-5',
+    'pipeline': StableDiffusionPipeline,
+    'dtype' : torch.float16
+  },
+  'sd-xl' : {
+    'repo' : 'stabilityai/stable-diffusion-xl-base-1.0',
+    'pipeline' : StableDiffusionXLPipeline,
+    'dtype' : torch.float32
+  }
+}
 
 def main() -> None:
   if len(sys.argv) < 2:
@@ -25,31 +36,27 @@ def main() -> None:
     sys.exit(1)
 
   promptFile = Path(sys.argv[1]).resolve()
-  promptText = loadPrompt(promptFile)
+  promptData = loadPrompt(promptFile)
 
   # Where the script lives — output image goes here
   timeStamp = datetime.now().strftime('%Y%m%d-%H%M%S')
   outputFile = OUTPUT_DIR / f'IMG{timeStamp}.png'
 
-  repo = {
-    'sdModel': 'runwayml/stable-diffusion-v1-5',
-    'xlModel': 'stabilityai/stable-diffusion-xl-base-1.0',
-  }
+  # Load the local model as defined in the configuration.
+  # Simple example of pipeline call. Functions and names stored in dict to allow for easy switching.
+  # What ends up eing executed based on XL flag.
+  # pipe = StableDiffusionXLPipeline.from_pretrained(
+  #     'stabilityai/stable-diffusion-xl-base-1.0',
+  #     cache_dir=MODEL_DIR,
+  #     torch_dtype=torch.float16
+  # )
 
-  # Load pipeline from Hugging Face into local models directory
-  if XL:
-    pipe = StableDiffusionXLPipeline.from_pretrained(
-      repo['xlModel'],
-      cache_dir=MODEL_DIR,
-      torch_dtype=torch.float16
-    )
-
-  else:
-    pipe = StableDiffusionPipeline.from_pretrained(
-      repo['sdModel'],
-      cache_dir=MODEL_DIR,
-      torch_dtype=torch.float32
-    )
+  cfg = MODELS['sd-xl' if XL else 'sd']
+  pipe = cfg['pipeline'].from_pretrained(
+    cfg['repo'],
+    cache_dir=MODEL_DIR,
+    torch_dtype=cfg['dtype']
+  )
 
   # deviceType = 'cuda' if torch.cuda.is_available() else 'cpu'
   deviceType = 'mps' if torch.backends.mps.is_available() else 'cpu'
@@ -57,7 +64,19 @@ def main() -> None:
   print(f'\n ---- Using device: {deviceType} -----\n')
 
   # Generate image
-  image = pipe(promptText, num_inference_steps=30, guidance_scale=7.5).images[0]
+  promptText = ', '.join(promptData['prompt'])
+  negativePromptText = ', '.join(promptData['exclude'])
+  pipeArgs = {
+    'prompt': promptText,
+    'num_inference_steps': 30,
+    'guidance_scale' : 7.5
+  }
+
+  # Append negative prompt argument if exists.
+  if negativePromptText:
+    pipeArgs['negative_prompt'] = negativePromptText
+
+  image = pipe(**pipeArgs).images[0]
 
   # Save output
   image.save(outputFile)
@@ -65,14 +84,43 @@ def main() -> None:
   print(f'\n ---- Image saved to: {outputFile} ----\n')
 
 
-def loadPrompt(promptFile: Path) -> str:
+def loadPrompt(promptFile: Path) -> dict:
+
+  promptText = {
+    'prompt': [],
+    'exclude': []
+  }
+
   if not promptFile.exists():
     raise FileNotFoundError(f'Prompt file not found: {promptFile}')
 
-  promptText = promptFile.read_text(encoding='utf-8').strip()
+  currentSection = None
 
-  if not promptText:
-    raise ValueError('Prompt file is empty')
+  # Get the text body so we can look for our appropriat esections.
+  text = promptFile.read_text(encoding='utf-8').strip()
+  for line in text.splitlines():
+    line = line.strip()
+
+    # Skip common comment lines.
+    if not line or line.startswith('#') or line.startswith('//') or line.startswith(';'):
+      continue
+
+    # Set what the current section is and then skip to the next line.
+    if line.lower() == '[prompt]':
+      currentSection = 'prompt'
+      continue
+
+    elif line.lower() == '[exclude]':
+      currentSection = 'exclude'
+      continue
+
+    # Append the line to the appropriate section.
+    if currentSection:
+      promptText[currentSection].append(line.strip())
+
+  # validate that we have prompt text. If exclude is missing we don't care we just won't use it.
+  if not promptText['prompt']:
+    raise ValueError('Prompt file contains no [prompt] section or is empty')
 
   return promptText
 

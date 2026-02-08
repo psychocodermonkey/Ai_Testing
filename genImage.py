@@ -16,7 +16,7 @@ from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
 
 from Ubiquitous import MODEL_DIR, OUTPUT_DIR
 
-XL = True
+XL = '--xl' in sys.argv
 MODELS = {
   'sd' : {
     'repo' : 'runwayml/stable-diffusion-v1-5',

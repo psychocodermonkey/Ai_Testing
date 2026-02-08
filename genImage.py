@@ -17,6 +17,10 @@ from datetime import datetime
 import torch
 from Ubiquitous import MODEL_DIR, OUTPUT_DIR
 from Ubiquitous import loadPrompt, hfLogin, genPromptString
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+  from transformers import CLIPTokenizer
 
 XL = '--xl' in sys.argv
 MAX_TOKENS = 77

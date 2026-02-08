@@ -13,6 +13,8 @@ from pathlib import Path
 from datetime import datetime
 import torch
 from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
+from diffusers import StableDiffusionImg2ImgPipeline, StableDiffusionXLImg2ImgPipeline
+from transformers import CLIPTokenizer
 
 from Ubiquitous import MODEL_DIR, OUTPUT_DIR
 
@@ -20,15 +22,19 @@ XL = '--xl' in sys.argv
 MODELS = {
   'sd' : {
     'repo' : 'runwayml/stable-diffusion-v1-5',
-    'pipeline': StableDiffusionPipeline,
+    'txtPipeline': StableDiffusionPipeline,
+    'imgPipeline': StableDiffusionImg2ImgPipeline,
     'dtype' : torch.float16
   },
   'sd-xl' : {
     'repo' : 'stabilityai/stable-diffusion-xl-base-1.0',
-    'pipeline' : StableDiffusionXLPipeline,
+    'txtPipeline' : StableDiffusionXLPipeline,
+    'imgPipeline' : StableDiffusionXLImg2ImgPipeline,
     'dtype' : torch.float32
   }
 }
+TOKENIZER = CLIPTokenizer.from_pretrained('openai/clip-vit-large-patch14')
+MAX_TOKENS = 77
 
 def main() -> None:
   """
@@ -56,7 +62,7 @@ def main() -> None:
   # )
 
   cfg = MODELS['sd-xl' if XL else 'sd']
-  pipe = cfg['pipeline'].from_pretrained(
+  pipe = cfg['txtPipeline'].from_pretrained(
     cfg['repo'],
     cache_dir=MODEL_DIR,
     torch_dtype=cfg['dtype']
@@ -64,8 +70,16 @@ def main() -> None:
 
   # deviceType = 'cuda' if torch.cuda.is_available() else 'cpu'
   deviceType = 'mps' if torch.backends.mps.is_available() else 'cpu'
+  pipe.safety_checker = None
   pipe = pipe.to(deviceType)
   print(f'\n ---- Using device: {deviceType} -----\n')
+
+  # Check for oversized prompts and alert the user.
+  for key in promptData:
+    tokens = tokenCount(', '.join(promptData[key]), TOKENIZER)
+    if tokens > MAX_TOKENS:
+      print(f'\n\nWARNING: {key.upper()} is {tokens} tokens;'
+            f'\nMaximum allowed is {MAX_TOKENS}.\n\n')
 
   # Generate image
   promptText = ', '.join(promptData['prompt'])
@@ -135,6 +149,27 @@ def loadPrompt(promptFile: Path) -> dict:
     raise ValueError('Prompt file contains no [prompt] section or is empty')
 
   return promptText
+
+
+def tokenCount(text: str, tokenizer: CLIPTokenizer) -> int:
+  """
+  Parse and return the number of tokens from a given string.
+
+  :param text: Prompt text to be checked.
+  :type text: str
+  :param tokenizer: Tokenizer to be leveraged to determine tokens used.
+  :type tokenizer: CLIPTokenizer
+  :return: Number of tokens used in the prompt.
+  :rtype: int
+  """
+
+  tokens = tokenizer(
+    text,
+    truncation=False,
+    add_special_tokens=True
+  )
+
+  return len(tokens["input_ids"])
 
 
 if __name__ == '__main__':

@@ -9,7 +9,7 @@
 '''
 
 import os
-import contextlib
+# import contextlib
 from pathlib import Path
 
 
@@ -70,8 +70,8 @@ def getModel(repoID: str = None, fileName: str = None, override: bool = False) -
   :type fileName: str
   :param override: Force delete and redownload of a model (true/false)
   :type override: bool
-  :return: Was script successful?
-  :rtype: bool
+  :return: Path to downloaded / existing model or none if there was a problem.
+  :rtype: Path | None
   """
   from huggingface_hub import hf_hub_download
 

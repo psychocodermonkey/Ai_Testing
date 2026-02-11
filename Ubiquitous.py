@@ -107,7 +107,7 @@ def hfLogin() -> bool:
   return "HF_TOKEN" in os.environ
 
 
-def loadPrompt(promptFile: Path) -> dict:
+def loadPrompt(promptFile: Path) -> dict[str, list[str]]:
   """
   Parse the prompt file for prompt and exclusion prompting headers.
 

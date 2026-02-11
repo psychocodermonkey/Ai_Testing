@@ -22,8 +22,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
   from transformers import CLIPTokenizer
 
-XL = '--xl' in sys.argv
-VERBOSE = '--verbose' in sys.argv
+XL: bool = '--xl' in sys.argv
+VERBOSE: bool = '--verbose' in sys.argv
 MAX_TOKENS = 77
 
 # Silence HTTP info messages
@@ -72,14 +72,14 @@ def main() -> None:
       'dtype' : torch.float32
     }
   }
-  TOKENIZER = CLIPTokenizer.from_pretrained('openai/clip-vit-large-patch14')
+  TOKENIZER:CLIPTokenizer = CLIPTokenizer.from_pretrained('openai/clip-vit-large-patch14')
 
-  promptFile = Path(sys.argv[1]).resolve()
-  promptData = loadPrompt(promptFile)
+  promptFile: Path = Path(sys.argv[1]).resolve()
+  promptData: dict[str, list[str]] = loadPrompt(promptFile)
 
   # Where the script lives — output image goes here
-  timeStamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-  outputFile = OUTPUT_DIR / f'IMG{timeStamp}.png'
+  timeStamp: str = datetime.now().strftime('%Y%m%d-%H%M%S')
+  outputFile: Path = OUTPUT_DIR / f'IMG{timeStamp}.png'
 
   # Load the local model as defined in the configuration.
   # Simple example of pipeline call. Functions and names stored in dict to allow for easy switching.
@@ -116,7 +116,7 @@ def main() -> None:
 
   # Check for oversized prompts and alert the user.
   for key in promptData:
-    tokens = tokenCount(genPromptString(promptData[key]), TOKENIZER)
+    tokens: int = tokenCount(genPromptString(promptData[key]), TOKENIZER)
     if tokens > MAX_TOKENS:
       print(f'\n\n[!] WARNING: {key.upper()} is {tokens} tokens;'
             f'\n[!] Maximum allowed is {MAX_TOKENS}.\n\n')
@@ -124,8 +124,8 @@ def main() -> None:
       print(f'[+] Tokens for {key.upper()}: {tokens}')
 
   # Generate image
-  promptText = genPromptString(promptData['prompt'])
-  negativePromptText = genPromptString(promptData['exclude'])
+  promptText: str = genPromptString(promptData['prompt'])
+  negativePromptText: str = genPromptString(promptData['exclude'])
   pipeArgs = {
     'prompt': promptText,
     'num_inference_steps': 30,
@@ -139,8 +139,8 @@ def main() -> None:
   image = pipe(**pipeArgs).images[0]
 
   # Start second pass configuration (image 2 image)
-  refinePrompt = genPromptString(promptData['refine prompt'])
-  refineNegativePrompt = genPromptString(promptData['refine exclude'])
+  refinePrompt: str = genPromptString(promptData['refine prompt'])
+  refineNegativePrompt: str = genPromptString(promptData['refine exclude'])
   imgPipeArgs = {
     'prompt' : refinePrompt,
     'image' : image,
@@ -167,7 +167,7 @@ def main() -> None:
   else:
     image.save(outputFile)
 
-  print(f'\n ---- Image saved to: {outputFile} ----\n')
+  print(f'\n[+] Image saved to: {outputFile}\n')
 
 
 def tokenCount(text: str, tokenizer: CLIPTokenizer) -> int:
@@ -182,7 +182,7 @@ def tokenCount(text: str, tokenizer: CLIPTokenizer) -> int:
   :rtype: int
   """
 
-  tokens = tokenizer(
+  tokens: CLIPTokenizer = tokenizer(
     text,
     truncation=False,
     add_special_tokens=True

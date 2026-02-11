@@ -60,7 +60,7 @@ def getOutputDir() -> Path:
   return Path(outputDir)
 
 
-def getModel(repoID: str = None, fileName: str = None, override: bool = False) -> bool:
+def getModel(repoID: str = None, fileName: str = None, override: bool = False) -> Path|None:
   """
   Download a model from hugging face repo and save it to a local directory.
 
@@ -77,11 +77,11 @@ def getModel(repoID: str = None, fileName: str = None, override: bool = False) -
 
   # Dump out if we didn't get the info we need to download the model.
   if repoID is None or fileName is None:
-    return False
+    return None
 
   # See if the model has already been downloaded, if so just return true and move on.
   if Path(MODEL_DIR / fileName).exists() and not override:
-    return True
+    return MODEL_DIR / fileName
 
   # Delete the file if override is set and it exists.
   if Path(MODEL_DIR / fileName).exists() and override:
@@ -92,7 +92,7 @@ def getModel(repoID: str = None, fileName: str = None, override: bool = False) -
     repo_id=repoID, filename=fileName, local_dir=MODEL_DIR, local_dir_use_symlinks=False
   )
 
-  return modelPath is not None
+  return Path(modelPath)
 
 
 def hfLogin() -> bool:

@@ -1,12 +1,17 @@
 #! /usr/bin/env python3
-'''
+"""
  Program: Ubiquitous tools for scripts
     Name: Andrew Dixon            File: Ubiquitous.py
     Date: 7 Feb 2026
    Notes:
 
+  Copyright (c) 2026 Andrew Dixon
+
+  This file is part of AI_Testing.
+  Licensed under the GNU Lesser General Public License v2.1.
+  See the LICENSE file at the project root for details.
 ........1.........2.........3.........4.........5.........6.........7.........8.........9.........0.........1.........2.........3..
-'''
+"""
 
 import os
 # import contextlib

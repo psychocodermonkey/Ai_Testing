@@ -86,3 +86,10 @@ neon orange streaks in fur
 high-detail fur, clothing, and computers
 code on displays
 ```
+
+---
+  Copyright (c) 2026 Andrew Dixon
+
+  This file is part of AI_Testing.
+  Licensed under the GNU Lesser General Public License v2.1.
+  See the LICENSE file at the project root for details.

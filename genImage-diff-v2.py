@@ -20,6 +20,7 @@ import sys
 import torch
 import logging
 import warnings
+# from PIL import Image
 from typing import Any, Literal
 from pathlib import Path
 from datetime import datetime
@@ -202,6 +203,23 @@ def main() -> None:
 
   promptData: dict[str, list[str]] = loadPrompt(promptFile)
 
+  inputImage = ''
+  if args.inputImage is not None:
+    inputPath: Path = args.inputImage.resolve()
+    if not inputPath.exists():
+      print(f'[!] Input image not found: {inputPath}')
+      sys.exit(2)
+
+    try:
+      from PIL import Image
+
+      inputImage: Image = Image.open(inputPath).convert('RGB')
+      print(f'[+] Using input image: {inputPath}')
+
+    except Exception as ex:
+      print(f'[!] Failed to load input image: {ex}')
+      sys.exit(2)
+
   timeStamp: str = datetime.now().strftime('%Y%m%d-%H%M%S')
   outputFile: Path = OUTPUT_DIR / f'{promptFile.stem}-{timeStamp}.png'
 
@@ -320,11 +338,26 @@ def main() -> None:
     if negativePromptText:
       txtArgs['negative_prompt'] = negativePromptText
 
-  image = txtPipe(**txtArgs).images[0]
+  image = ''
+  if inputImage is not None:
+    image = inputImage
+    print('[+] Skipping txt2img stage (input image provided).')
+
+  else:
+    image = txtPipe(**txtArgs).images[0]
 
   # Process second stage image to image prompt
   refinePrompt: str = genPromptString(promptData.get('refine prompt', []))
   refineNegativePrompt: str = genPromptString(promptData.get('refine exclude', []))
+
+  # If an external input image is supplied and no refine prompt exists,
+  # fall back to the base prompt so img2img still runs.
+  if inputImage is not None and not refinePrompt:
+    refinePrompt = promptText
+
+  # Same logic for negative prompts
+  if inputImage is not None and not refineNegativePrompt:
+    refineNegativePrompt = negativePromptText
 
   refinedImage = None
   if not refinePrompt:
@@ -351,6 +384,7 @@ def main() -> None:
     # Prefer refine negatives, else fall back to base negatives
     if refineNegativePrompt:
       imgArgs['negative_prompt'] = refineNegativePrompt
+
     elif negativePromptText:
       imgArgs['negative_prompt'] = negativePromptText
 
@@ -369,7 +403,7 @@ class Args:
   modelName: str
   isVerbose: bool
   listModels: bool
-
+  inputImage: Path | None
 
 def parseArgs(rawArgs: list[str]) -> Args:
   # Positional: promptFile
@@ -385,28 +419,43 @@ def parseArgs(rawArgs: list[str]) -> Args:
   modelName = 'pixart-sigma-512'
   if '--model' in rawArgs:
     modelIndex: int = rawArgs.index('--model')
+
     try:
-      modelName: str = rawArgs[modelIndex + 1].strip()
+      modelName = rawArgs[modelIndex + 1].strip()
+
     except IndexError:
       print('[!] --model requires a value.')
       printUsageAndExit(exitCode=2)
 
-  # First non-flag argument is the prompt file
+  inputImage: Path | None = None
+  if '--input-image' in rawArgs:
+    imageIndex: int = rawArgs.index('--input-image')
+
+    try:
+      inputImage = Path(rawArgs[imageIndex + 1]).expanduser()
+
+    except IndexError:
+      print('[!] --input-image requires a value.')
+      printUsageAndExit(exitCode=2)
+
   promptPath = ''
   skipNext = False
-  for idx, item in enumerate(rawArgs):
+  for item in rawArgs:
     if skipNext:
       skipNext = False
       continue
-    if item == '--model':
+
+    if item in ('--model', '--input-image'):
       skipNext = True
       continue
+
     if item.startswith('--'):
       continue
+
     promptPath = item
     break
 
-  if promptPath is None and not listModels:
+  if (not promptPath or promptPath is None) and not listModels:
     print('[!] Missing prompt file.')
     printUsageAndExit(exitCode=2)
   elif listModels:
@@ -417,6 +466,7 @@ def parseArgs(rawArgs: list[str]) -> Args:
     modelName=modelName,
     isVerbose=isVerbose,
     listModels=listModels,
+    inputImage=inputImage,
   )
 
 
@@ -424,10 +474,14 @@ def printUsageAndExit(exitCode: int = 1, models: dict[str, dict[str, Any]] | Non
   print(
     'Usage:\n'
     '  python generateImage.py <promptFile.prompt> [--model <name>] [--verbose]\n\n'
+    '  python generateImage.py <promptFile.prompt> [--model <name>] [--input-image <img.png>] [--verbose]\n\n'
+    '\n'
     'Examples:\n'
     '  python generateImage.py description.prompt\n'
     '  python generateImage.py description.prompt --model sd3.5-large\n'
     '  python generateImage.py description.prompt --model sd3.5-medium --verbose\n'
+    '  python generateImage.py refine.prompt --input-image output/previous.png --model sd3.5-medium\n'
+    '\n'
   )
 
   if models:

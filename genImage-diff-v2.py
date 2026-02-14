@@ -6,6 +6,53 @@
     Date: 13 Feb 2026
    Notes:
 
+    Local Diffusers Image Generation Shell
+    =======================================
+
+    This script is a local, dict-driven image generation framework built on Hugging Face Diffusers.
+    It is designed for rapid experimentation with multiple text-to-image and image-to-image models
+    while remaining hardware-aware, disk-aware, and easy to extend.
+
+    Core design goals:
+    - One script, many models: all model behavior is defined in a single MODELS dictionary
+        (pipelines, repos, parameters, constraints).
+    - Explicit control over prompt stages:
+        • Stage 1: text → image (optional if input image is supplied)
+        • Stage 2: image → image refinement (optional, model-dependent)
+    - Models may share or mix pipelines (e.g. PixArt txt2img + SDXL refiner).
+    - Long-prompt support where available (beyond CLIP's 77-token limit).
+    - Guardrails are model-driven, not hardcoded (no forced safety logic).
+    - Designed for Apple Silicon (MPS) but portable to CUDA/CPU systems.
+
+    Key features:
+    - Dict-driven model registry:
+        • repo / imgRepo
+        • txtPipeline / imgPipeline
+        • dtype, CPU offload control
+        • per-stage inference settings
+        • prompt handling rules (negative prompt modes, token limits)
+    - Optional external image input (--input-image) to:
+        • skip txt2img
+        • or drive refinement with fallback prompt logic
+    - Automatic handling of gated Hugging Face models.
+    - Model disk-awareness:
+        • can list configured models
+        • can indicate whether required model artifacts are already downloaded
+    - Clean output naming:
+        <promptName>-YYYYMMDD-HHMMSS.png
+    - Minimal CLI surface; tuning lives in the dict, not flags.
+
+    Intended use:
+    - Fast iteration on local image generation.
+    - Comparing model behavior (quality, speed, bias, guardrails).
+    - Exploring prompt structure and refinement strategies.
+    - Experimenting with mixed-model pipelines without rewriting code.
+
+    This script is intentionally extensible:
+    To add a model, import its pipeline(s), add a dict entry, and run.
+
+    The architecture favors clarity, experimentation, and control over maximum automation.
+
   Copyright (c) 2026 Andrew Dixon
 
   This file is part of AI_Testing.
@@ -182,8 +229,8 @@ def main() -> None:
       'txt2img': {
         'numInferenceSteps': 25,
         'guidanceScale': 6.0,
-        'width': 1024,
-        'height': 1024,
+        'width': 512,
+        'height': 512,
         'maxSequenceLength': 256,
         'negativePromptMode': 'empty',  # PixArt-Sigma expects ""
       },
@@ -204,8 +251,8 @@ def main() -> None:
       'txt2img': {
         'numInferenceSteps': 25,
         'guidanceScale': 6.0,
-        'width': 1024,
-        'height': 1024,
+        'width': 512,
+        'height': 512,
         'maxSequenceLength': 256,
       },
       'img2img': {

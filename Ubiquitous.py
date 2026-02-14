@@ -14,7 +14,6 @@
 """
 
 import os
-# import contextlib
 from pathlib import Path
 
 
@@ -65,51 +64,68 @@ def getOutputDir() -> Path:
   return Path(outputDir)
 
 
-def getModel(repoID: str = None, fileName: str = None, override: bool = False) -> Path|None:
+def getModel(repoID: str = None, fileName: str = None, override: bool = False) -> Path | None:
   """
   Download a model from hugging face repo and save it to a local directory.
-
-  :param repoID: Repository ID of model to download from hugging face
-  :type repoID: str
-  :param fileName: Filename of model to download from hugging face repo.
-  :type fileName: str
-  :param override: Force delete and redownload of a model (true/false)
-  :type override: bool
-  :return: Path to downloaded / existing model or none if there was a problem.
-  :rtype: Path | None
   """
   from huggingface_hub import hf_hub_download
 
-  # Dump out if we didn't get the info we need to download the model.
   if repoID is None or fileName is None:
     return None
 
-  # See if the model has already been downloaded, if so just return true and move on.
-  if Path(MODEL_DIR / fileName).exists() and not override:
-    return MODEL_DIR / fileName
+  targetPath = MODEL_DIR / fileName
 
-  # Delete the file if override is set and it exists.
-  if Path(MODEL_DIR / fileName).exists() and override:
-    Path(MODEL_DIR / fileName).unlink()
+  if targetPath.exists() and not override:
+    return targetPath
 
-  # Download the model if it does not exist or we are overriding.
+  if targetPath.exists() and override:
+    targetPath.unlink()
+
+  hfToken = hfLogin()
+
   modelPath = hf_hub_download(
-    repo_id=repoID, filename=fileName, local_dir=MODEL_DIR, local_dir_use_symlinks=False
+    repo_id=repoID,
+    filename=fileName,
+    local_dir=MODEL_DIR,
+    local_dir_use_symlinks=False,
+    token=hfToken,
   )
 
   return Path(modelPath)
 
 
-def hfLogin() -> bool:
-  """Log in to hugging face from .env token."""
-  env = Path(__file__).parent / '.env'
-  if env.exists():
-    from dotenv import load_dotenv
-    # from huggingface_hub import login
-    # Bring in secrets from environment file
-    load_dotenv()
-    # login(token=os.getenv('HF_TOKEN'))
-  return "HF_TOKEN" in os.environ
+def hfLogin() -> str | None:
+  """
+  Load HF_TOKEN (optionally from .env) and make it available for Hugging Face Hub.
+
+  Returns the token string if present, else None.
+  """
+  envPath = Path(__file__).parent / '.env'
+  if envPath.exists():
+    try:
+      from dotenv import load_dotenv
+
+      load_dotenv(dotenv_path=envPath)
+    except Exception:
+      # dotenv isn't required if HF_TOKEN is already in the environment
+      pass
+
+  token = os.getenv('HF_TOKEN')
+  if not token:
+    return None
+
+  token = token.strip()
+
+  # Cache token for huggingface_hub so downstream libraries can pick it up silently.
+  try:
+    from huggingface_hub import HfFolder
+
+    HfFolder.save_token(token)
+  except Exception:
+    # Not fatal; we can still pass token directly.
+    pass
+
+  return token
 
 
 def loadPrompt(promptFile: Path) -> dict[str, list[str]]:

@@ -20,7 +20,7 @@ import sys
 import torch
 import logging
 import warnings
-from typing import Any
+from typing import Any, Literal
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
@@ -28,19 +28,12 @@ from Ubiquitous import MODEL_DIR, OUTPUT_DIR
 from Ubiquitous import genPromptString, hfLogin, loadPrompt
 
 
-@dataclass(frozen=True, slots=True)
-class Args:
-  promptFile: Path
-  modelName: str
-  isVerbose: bool
-  listModels: bool
-
-
 def main() -> None:
+  """Main"""
   if len(sys.argv) < 2:
     printUsageAndExit()
 
-  args = parseArgs(sys.argv[1:])
+  args: Args = parseArgs(sys.argv[1:])
 
   # Set baseline logging (quiet mode handled below)
   logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
@@ -63,13 +56,13 @@ def main() -> None:
     diffusersLogging.set_verbosity_error()
     diffusersLogging.disable_progress_bar()
 
-  hfToken = hfLogin()
+  hfToken: str | None = hfLogin()
   print(f'[+] HF Login Success: {bool(hfToken)}')
 
   # Model registry: everything tweakable lives here.
   # Add new models by adding new keys; select with --model <name>.
   MODELS: dict[str, dict[str, Any]] = {
-    # SD3.5 Medium (gated; you said you're fine accepting HF access)
+    # SD3.5 Medium
     'sd3.5-medium': {
       'repo': 'stabilityai/stable-diffusion-3.5-medium',
       'txtPipeline': StableDiffusion3Pipeline,
@@ -90,7 +83,7 @@ def main() -> None:
         'maxSequenceLength': 128,
       },
     },
-    # SD3.5 Large (add it now; you can switch via --model sd3.5-large)
+    # SD3.5 Large
     'sd3.5-large': {
       'repo': 'stabilityai/stable-diffusion-3.5-large',
       'txtPipeline': StableDiffusion3Pipeline,
@@ -111,8 +104,7 @@ def main() -> None:
         'maxSequenceLength': 128,
       },
     },
-    # Placeholder so we don't design ourselves into a corner.
-    # PixArt-Σ support can be added later by populating these fields.
+    # PixArt-Σ XL model
     'pixart-sigma': {
       'repo': 'PixArt-alpha/PixArt-Sigma-XL-2-1024-MS',
       'txtPipeline': PixArtSigmaPipeline,
@@ -126,7 +118,7 @@ def main() -> None:
         'width': 1024,
         'height': 1024,
         'maxSequenceLength': 256,
-        'negativePromptMode': 'empty',
+        'negativePromptMode': 'empty',   # PixArt-Sigma expects ""
       },
       'img2img': {
         'strength': 0.20,
@@ -134,6 +126,7 @@ def main() -> None:
         'guidanceScale': 6.0,
       },
     },
+    # PixArt-Σ 512
     'pixart-sigma-512': {
       'repo': 'Jingya/pixart_sigma_pipe_xl_2_512_ms',
       'txtPipeline': PixArtSigmaPipeline,
@@ -155,6 +148,7 @@ def main() -> None:
         'guidanceScale': 5.5,
       },
     },
+    # PixArt-α 512
     'pixart-alpha-512': {
       'repo': 'PixArt-alpha/PixArt-XL-2-512x512',
       'txtPipeline': PixArtAlphaPipeline,
@@ -177,16 +171,22 @@ def main() -> None:
     },
   }
 
+  # Print out the models thi is configured to utilize. (Dump MODELS dict)
   if args.listModels:
     printUsageAndExit(exitCode=0, models=MODELS)
 
+  # Ensure the model is in the dict.
   if args.modelName not in MODELS:
     print(f"[!] Unknown model '{args.modelName}'. Available models:")
+
     for keyName in sorted(MODELS.keys()):
       extra = ''
+
       if MODELS[keyName].get('disabledReason'):
         extra = f' (disabled: {MODELS[keyName]["disabledReason"]})'
+
       print(f'  - {keyName}{extra}')
+
     sys.exit(2)
 
   cfg: dict[str, Any] = MODELS[args.modelName]
@@ -194,6 +194,7 @@ def main() -> None:
     print(f"[!] Model '{args.modelName}' is currently disabled: {cfg['disabledReason']}")
     sys.exit(2)
 
+  # Validate that the prompt file exists.
   promptFile: Path = args.promptFile.resolve()
   if not promptFile.exists():
     print(f'[!] Prompt file not found: {promptFile}')
@@ -204,12 +205,12 @@ def main() -> None:
   timeStamp: str = datetime.now().strftime('%Y%m%d-%H%M%S')
   outputFile: Path = OUTPUT_DIR / f'{promptFile.stem}-{timeStamp}.png'
 
-  deviceType = 'mps' if torch.backends.mps.is_available() else 'cpu'
+  deviceType: Literal["mps", "cpu"] = 'mps' if torch.backends.mps.is_available() else 'cpu'
   print(f'\n[+] Using device: {deviceType}')
   print(f'[+] Using model: {args.modelName}')
   print(f'[+] Output file: {outputFile}\n')
 
-  # Build pipelines
+  # Build text to image pipelines.
   txtPipelineClass = cfg['txtPipeline']
   if txtPipelineClass is None:
     print(f"[!] Model '{args.modelName}' has no txtPipeline configured.")
@@ -222,6 +223,8 @@ def main() -> None:
       torch_dtype=cfg['dtype'],
       token=hfToken,
     )
+
+  # If it is a gated repo and authentication fails report and exit.
   except GatedRepoError:
     print(f"[!] Access denied for gated model: {cfg['repo']}")
     print("[!] Visit the model page, request/accept access, then rerun.")
@@ -233,6 +236,7 @@ def main() -> None:
     try:
       txtPipe.enable_model_cpu_offload()
       print('[+] Enabled model CPU offload')
+
     except Exception as ex:
       print(f'[!] Failed to enable CPU offload: {ex}')
 
@@ -249,7 +253,9 @@ def main() -> None:
   imgPipe = None
 
   if imgPipelineClass is not None:
+    # If using a model that doesn't have it's own image to image we can sub in another pipeline
     imgRepo = cfg.get('imgRepo', cfg['repo'])
+
     try:
       imgPipe = imgPipelineClass.from_pretrained(
         imgRepo,
@@ -257,18 +263,23 @@ def main() -> None:
         torch_dtype=cfg['dtype'],
         token=hfToken,
       )
+
+    # If we are a gated repo and authentication fails, report and exit.
     except GatedRepoError:
       print(f'[!] Access denied for gated model: {imgRepo}')
       print('[!] Visit the model page, request/accept access, then rerun.')
       sys.exit(2)
 
+    # Set CPU offload if requested and available.
     if cfg.get('useCpuOffload'):
       try:
         imgPipe.enable_model_cpu_offload()
         print('[+] Enabled img2img model CPU offload')
+
       except Exception as ex:
         print(f'[!] Failed to enable img2img CPU offload: {ex}')
 
+    # Disable safety and be sure we get progress bars for progress tracking
     imgPipe.safety_checker = None
     imgPipe.set_progress_bar_config(disable=False)
 
@@ -279,6 +290,7 @@ def main() -> None:
   promptText: str = genPromptString(promptData.get('prompt', []))
   negativePromptText: str = genPromptString(promptData.get('exclude', []))
 
+  # Set up configurations for text -> image generation.
   txtCfg: dict[str, Any] = cfg['txt2img']
   txtArgs: dict[str, Any] = {
     'prompt': promptText,
@@ -288,25 +300,29 @@ def main() -> None:
     'height': txtCfg['height'],
   }
 
-  # SD3/SD3.5 accepts max_sequence_length
+  # Set max token length if specified in the configruation.
   if 'maxSequenceLength' in txtCfg:
     txtArgs['max_sequence_length'] = txtCfg['maxSequenceLength']
 
-
+  # Default negativePromptMode to normal if it is not in the dict.
   negativePromptMode = txtCfg.get('negativePromptMode', 'normal')
+
+  # Empty value for the negative prompt form models where it is recommended.
   if negativePromptMode == 'empty':
     txtArgs['negative_prompt'] = ''
 
+  # Leave the negativePrompt out alltogether for models that do not support it.
   elif negativePromptMode == 'omit':
     pass
 
+  # Bring in the negative prompt if provided and allowed.
   else:
     if negativePromptText:
       txtArgs['negative_prompt'] = negativePromptText
 
   image = txtPipe(**txtArgs).images[0]
 
-  # Stage 2: Image -> Image (optional)
+  # Process second stage image to image prompt
   refinePrompt: str = genPromptString(promptData.get('refine prompt', []))
   refineNegativePrompt: str = genPromptString(promptData.get('refine exclude', []))
 
@@ -346,6 +362,14 @@ def main() -> None:
 
   print(f'\n[+] Image saved to: {outputFile}\n')
 
+# Dataclass for passing command line arguments around.
+@dataclass(frozen=True, slots=True)
+class Args:
+  promptFile: Path
+  modelName: str
+  isVerbose: bool
+  listModels: bool
+
 
 def parseArgs(rawArgs: list[str]) -> Args:
   # Positional: promptFile
@@ -358,7 +382,7 @@ def parseArgs(rawArgs: list[str]) -> Args:
   isVerbose: bool = '--verbose' in rawArgs
   listModels: bool = '--list-models' in rawArgs
 
-  modelName = 'sd3.5-medium'
+  modelName = 'pixart-sigma-512'
   if '--model' in rawArgs:
     modelIndex: int = rawArgs.index('--model')
     try:
@@ -368,7 +392,7 @@ def parseArgs(rawArgs: list[str]) -> Args:
       printUsageAndExit(exitCode=2)
 
   # First non-flag argument is the prompt file
-  promptPath = None
+  promptPath = ''
   skipNext = False
   for idx, item in enumerate(rawArgs):
     if skipNext:
@@ -419,17 +443,21 @@ def printUsageAndExit(exitCode: int = 1, models: dict[str, dict[str, Any]] | Non
 
 
 def configureQuietMode(isVerbose: bool = False) -> None:
+  # If verbose let everything come through.
   if isVerbose:
     return
 
+  # Silence depreation warnings from Python
   warnings.filterwarnings(
-    'ignore',
+    action='ignore',
     message='.*upcast_vae.*deprecated.*',
     category=FutureWarning,
   )
 
+  # Ignore model warnings issuesd.
   warnings.filterwarnings('ignore', category=UserWarning)
 
+  # Set error logging for all others to ERROR only
   logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
   logging.getLogger('transformers').setLevel(logging.ERROR)
   logging.getLogger('diffusers').setLevel(logging.ERROR)

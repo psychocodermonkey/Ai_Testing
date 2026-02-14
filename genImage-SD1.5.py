@@ -211,11 +211,24 @@ def configureQuietMode(isVerbose: bool = False) -> None:
   if isVerbose:
     return
 
+  # Silence depreation warnings from Python
+  warnings.filterwarnings(
+    action='ignore',
+    message='.*upcast_vae.*deprecated.*',
+    category=FutureWarning,
+  )
+
+  # Ignore model warnings issuesd.
   warnings.filterwarnings('ignore', category=UserWarning)
 
+  # Set error logging for all others to ERROR only
   logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
   logging.getLogger('transformers').setLevel(logging.ERROR)
   logging.getLogger('diffusers').setLevel(logging.ERROR)
+  logging.getLogger('httpx').setLevel(logging.WARNING)
+  logging.getLogger('httpcore').setLevel(logging.WARNING)
+  logging.getLogger('hpack').setLevel(logging.WARNING)
+  logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 
 if __name__ == '__main__':

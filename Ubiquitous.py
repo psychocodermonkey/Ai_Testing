@@ -28,8 +28,8 @@ def getModelDir() -> Path:
   """
 
   # Build the path for where we want to store models.
-  base = Path(__file__).parent
-  modelDir = base / 'models'
+  base: Path = Path(__file__).parent
+  modelDir: Path = base / 'models'
 
   modelDir.mkdir(parents=True, exist_ok=True)
 
@@ -52,8 +52,8 @@ def getOutputDir() -> Path:
   :rtype: Path
   """
   # Build the path for where to save output.
-  base = Path(__file__).parent
-  outputDir = base / 'output'
+  base: Path = Path(__file__).parent
+  outputDir: Path = base / 'output'
 
   outputDir.mkdir(parents=True, exist_ok=True)
   gitignore = '*\n!.gitignore'
@@ -100,7 +100,7 @@ def hfLogin() -> str | None:
 
   Returns the token string if present, else None.
   """
-  envPath = Path(__file__).parent / '.env'
+  envPath: Path = Path(__file__).parent / '.env'
   if envPath.exists():
     try:
       from dotenv import load_dotenv
@@ -114,7 +114,7 @@ def hfLogin() -> str | None:
   if not token:
     return None
 
-  token = token.strip()
+  token: str = token.strip()
 
   # Cache token for huggingface_hub so downstream libraries can pick it up silently.
   try:

@@ -47,6 +47,9 @@ def main() -> None:
   from diffusers import (
     PixArtAlphaPipeline,
     PixArtSigmaPipeline,
+    StableDiffusionPipeline,
+    StableDiffusionXLPipeline,
+    StableDiffusionImg2ImgPipeline,
     StableDiffusion3Pipeline,
     StableDiffusion3Img2ImgPipeline,
     StableDiffusionXLImg2ImgPipeline,
@@ -63,6 +66,48 @@ def main() -> None:
   # Model registry: everything tweakable lives here.
   # Add new models by adding new keys; select with --model <name>.
   MODELS: dict[str, dict[str, Any]] = {
+    # SD1.5
+    'sd-1.5': {
+      'repo': 'runwayml/stable-diffusion-v1-5',
+      'txtPipeline': StableDiffusionPipeline,
+      'imgPipeline': StableDiffusionImg2ImgPipeline,
+      'dtype': torch.float16,
+      'useCpuOffload': False,
+      'txt2img': {
+        'numInferenceSteps': 30,
+        'guidanceScale': 8.0,
+        'width': 512,
+        'height': 512,
+        'maxSequenceLength': 77,  # CLIP hard limit
+        'negativePromptMode': 'normal',
+      },
+      'img2img': {
+        'strength': 0.20,
+        'numInferenceSteps': 30,
+        'guidanceScale': 6.0,
+        'maxSequenceLength': 77,
+      },
+    },
+    # SDXL Base
+    'sd-xl-base': {
+      'repo': 'stabilityai/stable-diffusion-xl-base-1.0',
+      'txtPipeline': StableDiffusionXLPipeline,
+      'imgPipeline': StableDiffusionXLImg2ImgPipeline,
+      'dtype': torch.float32,  # matches your original script
+      'useCpuOffload': False,
+      'txt2img': {
+        'numInferenceSteps': 30,
+        'guidanceScale': 8.0,
+        'width': 1024,
+        'height': 1024,
+        'negativePromptMode': 'normal',
+      },
+      'img2img': {
+        'strength': 0.20,
+        'numInferenceSteps': 30,
+        'guidanceScale': 6.0,
+      },
+    },
     # SD3.5 Medium
     'sd3.5-medium': {
       'repo': 'stabilityai/stable-diffusion-3.5-medium',
@@ -119,7 +164,7 @@ def main() -> None:
         'width': 1024,
         'height': 1024,
         'maxSequenceLength': 256,
-        'negativePromptMode': 'empty',   # PixArt-Sigma expects ""
+        'negativePromptMode': 'empty',  # PixArt-Sigma expects ""
       },
       'img2img': {
         'strength': 0.20,
@@ -203,7 +248,7 @@ def main() -> None:
 
   promptData: dict[str, list[str]] = loadPrompt(promptFile)
 
-  inputImage = ''
+  inputImage = None
   if args.inputImage is not None:
     inputPath: Path = args.inputImage.resolve()
     if not inputPath.exists():
@@ -338,7 +383,7 @@ def main() -> None:
     if negativePromptText:
       txtArgs['negative_prompt'] = negativePromptText
 
-  image = ''
+  image = None
   if inputImage is not None:
     image = inputImage
     print('[+] Skipping txt2img stage (input image provided).')

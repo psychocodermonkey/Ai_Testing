@@ -189,3 +189,4 @@ Desktop.ini
 
 # Skip prompt files
 *.prompt
+!saved.prompt

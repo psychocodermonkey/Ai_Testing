@@ -33,6 +33,7 @@ class Args:
   promptFile: Path
   modelName: str
   isVerbose: bool
+  listModels: bool
 
 
 def main() -> None:
@@ -46,10 +47,16 @@ def main() -> None:
   configureQuietMode(isVerbose=args.isVerbose)
 
   # Import noisy libs after quiet-mode config
-  from diffusers import StableDiffusion3Img2ImgPipeline, StableDiffusion3Pipeline
   from diffusers.utils import logging as diffusersLogging
   from transformers.utils import logging as hfLogging
   from huggingface_hub.errors import GatedRepoError
+  from diffusers import (
+    PixArtAlphaPipeline,
+    PixArtSigmaPipeline,
+    StableDiffusion3Pipeline,
+    StableDiffusion3Img2ImgPipeline,
+    StableDiffusionXLImg2ImgPipeline,
+  )
 
   if not args.isVerbose:
     hfLogging.set_verbosity_error()
@@ -59,7 +66,6 @@ def main() -> None:
   hfToken = hfLogin()
   print(f'[+] HF Login Success: {bool(hfToken)}')
 
-
   # Model registry: everything tweakable lives here.
   # Add new models by adding new keys; select with --model <name>.
   MODELS: dict[str, dict[str, Any]] = {
@@ -67,6 +73,7 @@ def main() -> None:
     'sd3.5-medium': {
       'repo': 'stabilityai/stable-diffusion-3.5-medium',
       'txtPipeline': StableDiffusion3Pipeline,
+      'imgPipeline': StableDiffusion3Img2ImgPipeline,
       'dtype': torch.float16,
       'useCpuOffload': True,  # safer default on MPS.
       'txt2img': {
@@ -87,6 +94,7 @@ def main() -> None:
     'sd3.5-large': {
       'repo': 'stabilityai/stable-diffusion-3.5-large',
       'txtPipeline': StableDiffusion3Pipeline,
+      'imgPipeline': StableDiffusion3Img2ImgPipeline,
       'dtype': torch.float16,
       'useCpuOffload': False,  # safer default on MPS.
       'txt2img': {
@@ -107,23 +115,70 @@ def main() -> None:
     # PixArt-Σ support can be added later by populating these fields.
     'pixart-sigma': {
       'repo': 'PixArt-alpha/PixArt-Sigma-XL-2-1024-MS',
-      'txtPipeline': None,  # fill in later if/when you enable it
+      'txtPipeline': PixArtSigmaPipeline,
+      'imgPipeline': StableDiffusionXLImg2ImgPipeline,
+      'imgRepo': 'stabilityai/stable-diffusion-xl-refiner-1.0',
       'dtype': torch.float16,
-      'useCpuOffload': False,
+      'useCpuOffload': True,
       'txt2img': {
         'numInferenceSteps': 30,
         'guidanceScale': 7.0,
-        'width': 512,
-        'height': 512,
+        'width': 1024,
+        'height': 1024,
+        'maxSequenceLength': 256,
+        'negativePromptMode': 'empty',
       },
       'img2img': {
         'strength': 0.20,
         'numInferenceSteps': 30,
         'guidanceScale': 6.0,
       },
-      'disabledReason': 'Placeholder entry; enable when PixArt img2img path is confirmed.',
+    },
+    'pixart-sigma-512': {
+      'repo': 'Jingya/pixart_sigma_pipe_xl_2_512_ms',
+      'txtPipeline': PixArtSigmaPipeline,
+      'imgPipeline': StableDiffusionXLImg2ImgPipeline,
+      'imgRepo': 'stabilityai/stable-diffusion-xl-refiner-1.0',
+      'dtype': torch.float16,
+      'useCpuOffload': True,
+      'txt2img': {
+        'numInferenceSteps': 25,
+        'guidanceScale': 6.0,
+        'width': 1024,
+        'height': 1024,
+        'maxSequenceLength': 256,
+        'negativePromptMode': 'empty',  # PixArt-Sigma expects ""
+      },
+      'img2img': {
+        'strength': 0.20,
+        'numInferenceSteps': 20,
+        'guidanceScale': 5.5,
+      },
+    },
+    'pixart-alpha-512': {
+      'repo': 'PixArt-alpha/PixArt-XL-2-512x512',
+      'txtPipeline': PixArtAlphaPipeline,
+      'imgPipeline': None,
+      'imgRepo': '',
+      'dtype': torch.float16,
+      'useCpuOffload': True,
+      'txt2img': {
+        'numInferenceSteps': 25,
+        'guidanceScale': 6.0,
+        'width': 1024,
+        'height': 1024,
+        'maxSequenceLength': 256,
+      },
+      'img2img': {
+        'strength': 0.20,
+        'numInferenceSteps': 20,
+        'guidanceScale': 5.5,
+      },
     },
   }
+
+  if args.listModels:
+    printUsageAndExit(exitCode=0, models=MODELS)
 
   if args.modelName not in MODELS:
     print(f"[!] Unknown model '{args.modelName}'. Available models:")
@@ -189,25 +244,36 @@ def main() -> None:
     txtPipe = txtPipe.to(deviceType)
 
   # Create SD3 img2img pipeline from the same checkpoint (avoids AutoPipeline import issues)
-  imgPipe = StableDiffusion3Img2ImgPipeline.from_pretrained(
-    cfg['repo'],
-    cache_dir=MODEL_DIR,
-    torch_dtype=cfg['dtype'],
-    token=hfToken,
-  )
+  # Build img2img pipeline (dict-driven; may be None)
+  imgPipelineClass = cfg.get('imgPipeline')
+  imgPipe = None
 
-  if cfg.get('useCpuOffload'):
+  if imgPipelineClass is not None:
+    imgRepo = cfg.get('imgRepo', cfg['repo'])
     try:
-      imgPipe.enable_model_cpu_offload()
-      print('[+] Enabled img2img model CPU offload')
-    except Exception as ex:
-      print(f'[!] Failed to enable img2img CPU offload: {ex}')
+      imgPipe = imgPipelineClass.from_pretrained(
+        imgRepo,
+        cache_dir=MODEL_DIR,
+        torch_dtype=cfg['dtype'],
+        token=hfToken,
+      )
+    except GatedRepoError:
+      print(f'[!] Access denied for gated model: {imgRepo}')
+      print('[!] Visit the model page, request/accept access, then rerun.')
+      sys.exit(2)
 
-  imgPipe.safety_checker = None
-  imgPipe.set_progress_bar_config(disable=False)
+    if cfg.get('useCpuOffload'):
+      try:
+        imgPipe.enable_model_cpu_offload()
+        print('[+] Enabled img2img model CPU offload')
+      except Exception as ex:
+        print(f'[!] Failed to enable img2img CPU offload: {ex}')
 
-  if not cfg.get('useCpuOffload'):
-    imgPipe = imgPipe.to(deviceType)
+    imgPipe.safety_checker = None
+    imgPipe.set_progress_bar_config(disable=False)
+
+    if not cfg.get('useCpuOffload'):
+      imgPipe = imgPipe.to(deviceType)
 
   # Stage 1: Text -> Image
   promptText: str = genPromptString(promptData.get('prompt', []))
@@ -226,8 +292,17 @@ def main() -> None:
   if 'maxSequenceLength' in txtCfg:
     txtArgs['max_sequence_length'] = txtCfg['maxSequenceLength']
 
-  if negativePromptText:
-    txtArgs['negative_prompt'] = negativePromptText
+
+  negativePromptMode = txtCfg.get('negativePromptMode', 'normal')
+  if negativePromptMode == 'empty':
+    txtArgs['negative_prompt'] = ''
+
+  elif negativePromptMode == 'omit':
+    pass
+
+  else:
+    if negativePromptText:
+      txtArgs['negative_prompt'] = negativePromptText
 
   image = txtPipe(**txtArgs).images[0]
 
@@ -236,7 +311,13 @@ def main() -> None:
   refineNegativePrompt: str = genPromptString(promptData.get('refine exclude', []))
 
   refinedImage = None
-  if refinePrompt:
+  if not refinePrompt:
+    print('[+] No refine prompt found; skipping refine stage.')
+
+  elif imgPipe is None:
+    print('[+] No img2img pipeline configured for this model; skipping refine stage.')
+
+  else:
     print('[+] Refining image...')
     imgCfg: dict[str, Any] = cfg['img2img']
 
@@ -258,8 +339,6 @@ def main() -> None:
       imgArgs['negative_prompt'] = negativePromptText
 
     refinedImage = imgPipe(**imgArgs).images[0]
-  else:
-    print('[+] No refine prompt found; skipping refine stage.')
 
   # Save final output only
   finalImage = refinedImage if refinedImage is not None else image
@@ -277,6 +356,7 @@ def parseArgs(rawArgs: list[str]) -> Args:
     printUsageAndExit()
 
   isVerbose: bool = '--verbose' in rawArgs
+  listModels: bool = '--list-models' in rawArgs
 
   modelName = 'sd3.5-medium'
   if '--model' in rawArgs:
@@ -302,18 +382,21 @@ def parseArgs(rawArgs: list[str]) -> Args:
     promptPath = item
     break
 
-  if promptPath is None:
+  if promptPath is None and not listModels:
     print('[!] Missing prompt file.')
     printUsageAndExit(exitCode=2)
+  elif listModels:
+    promptPath = 'empty'
 
   return Args(
     promptFile=Path(promptPath),
     modelName=modelName,
     isVerbose=isVerbose,
+    listModels=listModels,
   )
 
 
-def printUsageAndExit(exitCode: int = 1) -> None:
+def printUsageAndExit(exitCode: int = 1, models: dict[str, dict[str, Any]] | None = None,) -> None:
   print(
     'Usage:\n'
     '  python generateImage.py <promptFile.prompt> [--model <name>] [--verbose]\n\n'
@@ -322,12 +405,28 @@ def printUsageAndExit(exitCode: int = 1) -> None:
     '  python generateImage.py description.prompt --model sd3.5-large\n'
     '  python generateImage.py description.prompt --model sd3.5-medium --verbose\n'
   )
+
+  if models:
+    print('Available models:')
+    for modelName in sorted(models.keys()):
+      cfg = models[modelName]
+      extra = ''
+      if cfg.get('disabledReason'):
+        extra = f' (disabled: {cfg["disabledReason"]})'
+      print(f'  - {modelName}{extra}')
+
   sys.exit(exitCode)
 
 
 def configureQuietMode(isVerbose: bool = False) -> None:
   if isVerbose:
     return
+
+  warnings.filterwarnings(
+    'ignore',
+    message='.*upcast_vae.*deprecated.*',
+    category=FutureWarning,
+  )
 
   warnings.filterwarnings('ignore', category=UserWarning)
 

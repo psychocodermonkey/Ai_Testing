@@ -20,7 +20,6 @@ import sys
 import torch
 import logging
 import warnings
-# from PIL import Image
 from typing import Any, Literal
 from pathlib import Path
 from datetime import datetime
@@ -66,7 +65,7 @@ def main() -> None:
   # Model registry: everything tweakable lives here.
   # Add new models by adding new keys; select with --model <name>.
   MODELS: dict[str, dict[str, Any]] = {
-    # SD1.5
+    # # SD1.5
     'sd-1.5': {
       'repo': 'runwayml/stable-diffusion-v1-5',
       'txtPipeline': StableDiffusionPipeline,
@@ -108,7 +107,7 @@ def main() -> None:
         'guidanceScale': 6.0,
       },
     },
-    # SD3.5 Medium
+    # # SD3.5 Medium
     'sd3.5-medium': {
       'repo': 'stabilityai/stable-diffusion-3.5-medium',
       'txtPipeline': StableDiffusion3Pipeline,
@@ -129,7 +128,7 @@ def main() -> None:
         'maxSequenceLength': 128,
       },
     },
-    # SD3.5 Large
+    # # SD3.5 Large
     'sd3.5-large': {
       'repo': 'stabilityai/stable-diffusion-3.5-large',
       'txtPipeline': StableDiffusion3Pipeline,
@@ -194,7 +193,7 @@ def main() -> None:
         'guidanceScale': 5.5,
       },
     },
-    # PixArt-α 512
+    # # PixArt-α 512
     'pixart-alpha-512': {
       'repo': 'PixArt-alpha/PixArt-XL-2-512x512',
       'txtPipeline': PixArtAlphaPipeline,
@@ -515,6 +514,57 @@ def parseArgs(rawArgs: list[str]) -> Args:
   )
 
 
+def repoIdToCachePrefix(repoId: str) -> str:
+  # HuggingFace cache folder naming: models--{org}--{repo}
+  parts = repoId.strip().split('/')
+  if len(parts) != 2:
+    return ''
+  return f'models--{parts[0]}--{parts[1]}'
+
+
+def isRepoCached(repoId: str, modelDir: Path) -> bool:
+  prefix = repoIdToCachePrefix(repoId)
+  if not prefix:
+    return False
+
+  # Most common: a directory with that exact prefix exists
+  if (modelDir / prefix).exists():
+    return True
+
+  # Some setups nest differently; allow "starts with" match as fallback
+  try:
+    for item in modelDir.iterdir():
+      if item.is_dir() and item.name.startswith(prefix):
+        return True
+
+  except FileNotFoundError:
+    return False
+
+  return False
+
+
+def supportsColor() -> bool:
+  return sys.stdout.isatty()
+
+
+def color(text: str, code: str) -> str:
+  if not supportsColor():
+    return text
+  return f'\033[{code}m{text}\033[0m'
+
+
+def red(text: str) -> str:
+  return color(text, '31')
+
+
+def green(text: str) -> str:
+  return color(text, '32')
+
+
+def yellow(text: str) -> str:
+  return color(text, '33')
+
+
 def printUsageAndExit(exitCode: int = 1, models: dict[str, dict[str, Any]] | None = None,) -> None:
   print(
     'Usage:\n'
@@ -531,12 +581,37 @@ def printUsageAndExit(exitCode: int = 1, models: dict[str, dict[str, Any]] | Non
 
   if models:
     print('Available models:')
+
+    needsDownload: bool = False
+
     for modelName in sorted(models.keys()):
       cfg = models[modelName]
-      extra = ''
+
+      repoId = cfg.get('repo')
+      imgRepoId = cfg.get('imgRepo')
+
+      missing = False
+
+      if repoId and not isRepoCached(repoId, MODEL_DIR):
+        missing = True
+
+      if imgRepoId and not isRepoCached(imgRepoId, MODEL_DIR):
+        missing = True
+
+      line = f'  - {modelName}'
+
       if cfg.get('disabledReason'):
-        extra = f' (disabled: {cfg["disabledReason"]})'
-      print(f'  - {modelName}{extra}')
+        line += f' (disabled: {cfg["disabledReason"]})'
+
+      if missing:
+        print(yellow(line))
+        needsDownload = True
+      else:
+        print(line)
+
+    if needsDownload:
+      print()
+      print(yellow('One or more models above must be downloaded before use.\n'))
 
   sys.exit(exitCode)
 

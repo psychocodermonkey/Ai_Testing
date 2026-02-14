@@ -37,7 +37,8 @@ logging.getLogger('httpcore').setLevel(logging.WARNING)
 logging.getLogger('hpack').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-print(f'[+] HF Login Success: {hfLogin()}')
+hfToken = hfLogin()
+print(f'[+] HF Login Success: {bool(hfToken)}')
 
 def main() -> None:
   """
@@ -57,6 +58,7 @@ def main() -> None:
   from diffusers.utils import logging as diffusersLogging
   from transformers import CLIPTokenizer
   from transformers.utils import logging as hfLogging
+  from huggingface_hub.errors import GatedRepoError
 
   if not VERBOSE:
     hfLogging.set_verbosity_error()
@@ -85,7 +87,8 @@ def main() -> None:
 
   # Where the script lives — output image goes here
   timeStamp: str = datetime.now().strftime('%Y%m%d-%H%M%S')
-  outputFile: Path = OUTPUT_DIR / f'IMG{timeStamp}.png'
+  # outputFile: Path = OUTPUT_DIR / f'IMG{timeStamp}.png'
+  outputFile: Path = OUTPUT_DIR / f'{promptFile.stem}-{timeStamp}.png'
 
   # Load the local model as defined in the configuration.
   # Simple example of pipeline call. Functions and names stored in dict to allow for easy switching.
@@ -97,11 +100,18 @@ def main() -> None:
   # )
 
   cfg = MODELS['sd-xl' if XL else 'sd']
-  pipe = cfg['txtPipeline'].from_pretrained(
-    cfg['repo'],
-    cache_dir=MODEL_DIR,
-    torch_dtype=cfg['dtype']
-  )
+  try:
+    pipe = cfg['txtPipeline'].from_pretrained(
+      cfg['repo'],
+      cache_dir=MODEL_DIR,
+      torch_dtype=cfg['dtype'],
+      token=hfToken,
+    )
+
+  except GatedRepoError:
+    print(f"[!] Access denied for gated model: {cfg['repo']}")
+    print("[!] Visit the model page, request/accept access, then rerun.")
+    sys.exit(2)
 
   imgPipe = cfg['imgPipeline'](**pipe.components)
 

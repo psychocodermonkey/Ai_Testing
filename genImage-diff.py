@@ -304,7 +304,7 @@ def main() -> None:
     try:
       from PIL import Image
 
-      inputImage: Image = Image.open(inputPath).convert('RGB')
+      inputImage: Image.Image = Image.open(inputPath).convert('RGB')
       print(f'[+] Using input image: {inputPath}')
 
     except Exception as ex:
@@ -363,7 +363,7 @@ def main() -> None:
 
   if imgPipelineClass is not None:
     # If using a model that doesn't have it's own image to image we can sub in another pipeline
-    imgRepo = cfg.get('imgRepo', cfg['repo'])
+    imgRepo: str = cfg.get('imgRepo', cfg['repo'])
 
     try:
       imgPipe = imgPipelineClass.from_pretrained(
@@ -414,7 +414,7 @@ def main() -> None:
     txtArgs['max_sequence_length'] = txtCfg['maxSequenceLength']
 
   # Default negativePromptMode to normal if it is not in the dict.
-  negativePromptMode = txtCfg.get('negativePromptMode', 'normal')
+  negativePromptMode: str = txtCfg.get('negativePromptMode', 'normal')
 
   # Empty value for the negative prompt form models where it is recommended.
   if negativePromptMode == 'empty':
@@ -429,13 +429,13 @@ def main() -> None:
     if negativePromptText:
       txtArgs['negative_prompt'] = negativePromptText
 
-  image = None
+  image: Image.Image | None = None
   if inputImage is not None:
-    image = inputImage
+    image: Image.Image = inputImage
     print('[+] Skipping txt2img stage (input image provided).')
 
   else:
-    image = txtPipe(**txtArgs).images[0]
+    image: Image.Image = txtPipe(**txtArgs).images[0]
 
   # Process second stage image to image prompt
   refinePrompt: str = genPromptString(promptData.get('refine prompt', []))
@@ -444,11 +444,11 @@ def main() -> None:
   # If an external input image is supplied and no refine prompt exists,
   # fall back to the base prompt so img2img still runs.
   if inputImage is not None and not refinePrompt:
-    refinePrompt = promptText
+    refinePrompt: str = promptText
 
   # Same logic for negative prompts
   if inputImage is not None and not refineNegativePrompt:
-    refineNegativePrompt = negativePromptText
+    refineNegativePrompt: str = negativePromptText
 
   refinedImage = None
   if not refinePrompt:
@@ -479,10 +479,10 @@ def main() -> None:
     elif negativePromptText:
       imgArgs['negative_prompt'] = negativePromptText
 
-    refinedImage = imgPipe(**imgArgs).images[0]
+    refinedImage: Image.Image = imgPipe(**imgArgs).images[0]
 
   # Save final output only
-  finalImage = refinedImage if refinedImage is not None else image
+  finalImage: Image.Image = refinedImage if refinedImage is not None else image
   finalImage.save(outputFile)
 
   print(f'\n[+] Image saved to: {outputFile}\n')
@@ -512,7 +512,7 @@ def parseArgs(rawArgs: list[str]) -> Args:
     modelIndex: int = rawArgs.index('--model')
 
     try:
-      modelName = rawArgs[modelIndex + 1].strip()
+      modelName: str = rawArgs[modelIndex + 1].strip()
 
     except IndexError:
       print('[!] --model requires a value.')
@@ -523,7 +523,7 @@ def parseArgs(rawArgs: list[str]) -> Args:
     imageIndex: int = rawArgs.index('--input-image')
 
     try:
-      inputImage = Path(rawArgs[imageIndex + 1]).expanduser()
+      inputImage: Path = Path(rawArgs[imageIndex + 1]).expanduser()
 
     except IndexError:
       print('[!] --input-image requires a value.')
@@ -563,14 +563,14 @@ def parseArgs(rawArgs: list[str]) -> Args:
 
 def repoIdToCachePrefix(repoId: str) -> str:
   # HuggingFace cache folder naming: models--{org}--{repo}
-  parts = repoId.strip().split('/')
+  parts: list[str] = repoId.strip().split('/')
   if len(parts) != 2:
     return ''
   return f'models--{parts[0]}--{parts[1]}'
 
 
 def isRepoCached(repoId: str, modelDir: Path) -> bool:
-  prefix = repoIdToCachePrefix(repoId)
+  prefix: str = repoIdToCachePrefix(repoId)
   if not prefix:
     return False
 
@@ -632,7 +632,7 @@ def printUsageAndExit(exitCode: int = 1, models: dict[str, dict[str, Any]] | Non
     needsDownload: bool = False
 
     for modelName in sorted(models.keys()):
-      cfg = models[modelName]
+      cfg: dict[str, Any] = models[modelName]
 
       repoId = cfg.get('repo')
       imgRepoId = cfg.get('imgRepo')

@@ -6,7 +6,7 @@ This is a simple project to test and experiment with different AI models. Includ
 
 More to come as it gets developed!
 
-## Ubiquitous.py - A Python Script with functions for simplifying model handling
+## A Python Script with functions for simplifying model handling - [Ubiquitous.py](Ubiquitous.py)
 
 ### Overview
 
@@ -44,21 +44,87 @@ This file provides a set of Python functions designed to simplify and streamline
 - **Purpose**: This helper function converts a list of strings into a single string separated by commas, suitable for feeding directly into model inputs.
 - **Usage**: Use this function within your script to convert lists of prompts or exclusions into the format expected by Hugging Face models.
 
-### Basic Usage Examples in genImage.py
+## Image AI Model shell for Diffusers - [genImage-diff.py](genImage-diff.py)
 
-#### Generating an Image from Text Prompt
+A local, dict-driven image generation shell built on **Hugging Face Diffusers**.
+Designed for fast experimentation across multiple txt2img and img2img pipelines, with model behavior centralized in a single `MODELS` registry.
 
-The script `genImage.py` demonstrates how to generate an image based on a text prompt stored in a file. Here’s a basic example of how you can use it:
+---
+
+### What it does
+
+This script runs up to two stages:
+
+1. **Text → Image (txt2img)**
+   Generates an initial image from the prompt file.
+
+2. **Image → Image refinement (img2img)** *(optional)*
+   Refines the generated image (or a user-supplied input image) using a second prompt stage.
+
+Final output is saved as a timestamped PNG:
 
 ```bash
-python genImage.py path/to/promptFile.prompt
+<promptFileStem>-YYYYMMDD-HHMMSS.png
 ```
 
-This command will read the specified prompt file and generate an image using the Stable Diffusion model, saving the output to the default output directory with a timestamped filename.
+---
 
-### Advanced Usage with Refinement Options
+### Key features
 
-If `[refine prompt]` exists in the provided prompt file, the program will utilize a secondary model for taking the prodecd image and further refining it with the prompts provided under `[refine prompt]` and `[refine exclude]`. If `[refine exclude]` is not present, the excluded from the primary prompt will be substituted if present. This can yield better results than the text to image model alone.
+- **One script, many models**
+  All model behavior lives in `MODELS` (repo IDs, pipelines, dtype, offload, per-stage parameters).
+
+- **Hardware-aware**
+  Uses `mps` on Apple Silicon if available, otherwise falls back to `cpu`.
+
+- **Optional gated model handling**
+  Logs into Hugging Face and fails cleanly on `GatedRepoError`.
+
+- **Disk-awareness for models**
+  `--list-models` shows configured models and highlights those not cached in `MODEL_DIR`.
+
+- **Two-stage prompt design**
+  Base prompt + optional refine prompt.
+
+- **Input image mode**
+  `--input-image` skips txt2img and can drive refinement directly.
+
+---
+
+### Prompt file format
+
+Prompt files are parsed by `loadPrompt()` from `Ubiquitous` module noted above.
+The script looks for the following keys. `prompt` is the only hard required key.
+
+#### Base generation keys
+
+- `prompt`
+  Main prompt lines.
+
+- `exclude` *(optional)*
+  Negative prompt lines.
+
+#### Refinement keys (optional)
+
+- `refine prompt`
+  Prompt lines for img2img refinement.
+
+- `refine exclude` *(optional)*
+  Negative prompt lines for refinement.
+
+Each section is converted into a single string using `genPromptString()`.
+
+#### Behavior notes
+
+- If `refine prompt` is **missing or empty**, the refine stage is skipped.
+- If `--input-image` is supplied and `refine prompt` is missing, the script **falls back to the base prompt** so img2img still runs.
+- Negative prompt handling is model-driven via `negativePromptMode`:
+  - `normal` — include negative prompt if provided
+  - `empty` — pass `negative_prompt=""`
+  - `omit` — do not pass a negative prompt argument at all
+- Comments are allowed using `#`, `//`, or `;` and must be at the beginning of the line.
+
+#### Sample prompt file
 
 ```prompt
 [prompt]
@@ -88,8 +154,105 @@ code on displays
 ```
 
 ---
-  Copyright (c) 2026 Andrew Dixon
 
-  This file is part of AI_Testing.
-  Licensed under the GNU Lesser General Public License v2.1.
-  See the LICENSE file at the project root for details.
+### Usage
+
+#### Basic generation (txt2img)
+
+```bash
+python genImage-diff.py description.prompt
+```
+
+#### Select a model
+
+```bash
+python genImage-diff.py description.prompt --model sd3.5-large
+```
+
+#### Verbose logging
+
+```bash
+python genImage-diff.py description.prompt --model sd3.5-medium --verbose
+```
+
+#### Refine an existing image
+
+```bash
+python genImage-diff.py refine.prompt \
+  --input-image output/previous.png \
+  --model sd3.5-medium
+```
+
+#### List configured models and cache status
+
+```bash
+python genImage-diff.py --list-models
+```
+
+---
+
+### Models
+
+Models are defined in the `MODELS` dictionary. Each entry controls:
+
+- `repo` — Hugging Face model repo for txt2img
+- `txtPipeline` — Diffusers pipeline class for txt2img
+- `imgPipeline` — Diffusers pipeline class for img2img (optional)
+- `imgRepo` — repo for img2img pipeline (optional; defaults to `repo`)
+- `dtype` — torch dtype used for inference
+- `useCpuOffload` — enable `enable_model_cpu_offload()`
+- `txt2img` — inference steps, CFG scale, resolution, token limits
+- `img2img` — refinement strength, steps, CFG scale, token limits
+
+#### Adding a new model
+
+1. Import the required pipeline class in the Diffusers import block.
+2. Add a new entry to `MODELS` with:
+   - `repo`
+   - `txtPipeline`
+   - `dtype`
+   - `txt2img` settings
+3. If refinement is supported, also add:
+   - `imgPipeline`
+   - `img2img` settings
+   - optional `imgRepo` if refinement uses a different checkpoint
+
+No CLI changes are required.
+
+---
+
+### Output
+
+The output filename is generated automatically:
+
+```bash
+OUTPUT_DIR / "<promptFileStem>-YYYYMMDD-HHMMSS.png"
+```
+
+Only the final image is saved:
+
+- refined image if refinement ran
+- otherwise the base txt2img image
+- or the input image if no refinement was performed
+
+---
+
+### Common failure modes
+
+- **Access denied / gated repo**
+  You do not have access to the model. Visit the model page, request or accept access, then rerun.
+  - Account `auth key` is stored `.env` file at project root with the key name `HF_TOKEN`.
+
+- **Out of memory**
+  Reduce resolution or inference steps, enable CPU offload, or use a smaller model.
+
+- **No refinement performed**
+  Either `refine prompt` is missing, or the selected model does not define an `imgPipeline`.
+
+---
+
+## License
+
+Copyright (c) 2026 Andrew Dixon
+Licensed under the **GNU Lesser General Public License v2.1**.
+See the [`LICENSE`](LICENSE) file at the project root.

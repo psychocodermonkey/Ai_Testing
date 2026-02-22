@@ -64,7 +64,7 @@ def getOutputDir() -> Path:
   return Path(outputDir)
 
 
-def getModel(repoID: str = None, fileName: str = None, override: bool = False) -> Path | None:
+def getModel(repoID: str, fileName: str, override: bool = False) -> Path | None:
   """
   Download a model from hugging face repo and save it to a local directory.
   """
@@ -73,7 +73,7 @@ def getModel(repoID: str = None, fileName: str = None, override: bool = False) -
   if repoID is None or fileName is None:
     return None
 
-  targetPath = MODEL_DIR / fileName
+  targetPath: Path = MODEL_DIR / fileName
 
   if targetPath.exists() and not override:
     return targetPath
@@ -81,13 +81,13 @@ def getModel(repoID: str = None, fileName: str = None, override: bool = False) -
   if targetPath.exists() and override:
     targetPath.unlink()
 
-  hfToken = hfLogin()
+  hfToken: str | None = hfLogin()
 
-  modelPath = hf_hub_download(
+  modelPath: str = hf_hub_download(
     repo_id=repoID,
     filename=fileName,
     local_dir=MODEL_DIR,
-    local_dir_use_symlinks=False,
+    # local_dir_use_symlinks=False,
     token=hfToken,
   )
 
@@ -110,7 +110,7 @@ def hfLogin() -> str | None:
       # dotenv isn't required if HF_TOKEN is already in the environment
       pass
 
-  token = os.getenv('HF_TOKEN')
+  token: str | None = os.getenv('HF_TOKEN')
   if not token:
     return None
 
@@ -151,9 +151,9 @@ def loadPrompt(promptFile: Path) -> dict[str, list[str]]:
   currentSection = None
 
   # Get the text body so we can look for our appropriat esections.
-  text = promptFile.read_text(encoding='utf-8').strip()
+  text: str = promptFile.read_text(encoding='utf-8').strip()
   for line in text.splitlines():
-    line = line.strip()
+    line: str = line.strip()
 
     # Skip common comment lines.
     if not line or line.startswith('#') or line.startswith('//') or line.startswith(';'):
@@ -193,5 +193,5 @@ def genPromptString(lines: list[str]) -> str:
 
 
 # Globals
-MODEL_DIR = getModelDir()
-OUTPUT_DIR = getOutputDir()
+MODEL_DIR: Path = getModelDir()
+OUTPUT_DIR: Path = getOutputDir()

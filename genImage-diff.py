@@ -615,14 +615,18 @@ def yellow(text: str) -> str:
 def printUsageAndExit(exitCode: int = 1, models: dict[str, dict[str, Any]] | None = None,) -> None:
   print(
     'Usage:\n'
-    '  python generateImage.py <promptFile.prompt> [--model <name>] [--verbose]\n\n'
-    '  python generateImage.py <promptFile.prompt> [--model <name>] [--input-image <img.png>] [--verbose]\n\n'
+    '  To show models available:\n\n'
+    '  \tpython genImage-diff.py --list-models\n'
+    '\n'
+    '  To generate or process images:\n\n'
+    '  \tpython genImage-diff.py <promptFile.prompt> [--model <name>] [--verbose]\n'
+    '  \tpython generateImage.py <promptFile.prompt> [--model <name>] [--input-image <img.png>] [--verbose]\n'
     '\n'
     'Examples:\n'
-    '  python generateImage.py description.prompt\n'
-    '  python generateImage.py description.prompt --model sd3.5-large\n'
-    '  python generateImage.py description.prompt --model sd3.5-medium --verbose\n'
-    '  python generateImage.py refine.prompt --input-image output/previous.png --model sd3.5-medium\n'
+    '  python genImage-diff.py description.prompt\n'
+    '  python genImage-diff.py description.prompt --model sd3.5-large\n'
+    '  python genImage-diff.py description.prompt --model sd3.5-medium --verbose\n'
+    '  python genImage-diff.py refine.prompt --input-image output/previous.png --model sd3.5-medium\n'
     '\n'
   )
 

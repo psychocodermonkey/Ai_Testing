@@ -72,7 +72,7 @@ from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
 from ubiquitous import MODEL_DIR, OUTPUT_DIR
-from ubiquitous import genPromptString, hfLogin, loadPrompt
+from ubiquitous import generateImageFromPromptData, getImageModels, hfLogin, loadPrompt
 
 
 def main() -> None:
@@ -90,16 +90,6 @@ def main() -> None:
   from diffusers.utils import logging as diffusersLogging
   from transformers.utils import logging as hfLogging
   from huggingface_hub.errors import GatedRepoError
-  from diffusers import (
-    PixArtAlphaPipeline,
-    PixArtSigmaPipeline,
-    StableDiffusionPipeline,
-    StableDiffusionXLPipeline,
-    StableDiffusionImg2ImgPipeline,
-    StableDiffusion3Pipeline,
-    StableDiffusion3Img2ImgPipeline,
-    StableDiffusionXLImg2ImgPipeline,
-  )
 
   if not args.isVerbose:
     hfLogging.set_verbosity_error()
@@ -111,177 +101,27 @@ def main() -> None:
 
   # Model registry: everything tweakable lives here.
   # Add new models by adding new keys; select with --model <name>.
-  MODELS: dict[str, dict[str, Any]] = {
-    # # SD1.5
-    'sd-1.5': {
-      'repo': 'runwayml/stable-diffusion-v1-5',
-      'txtPipeline': StableDiffusionPipeline,
-      'imgPipeline': StableDiffusionImg2ImgPipeline,
-      'dtype': torch.float16,
-      'useCpuOffload': False,
-      'txt2img': {
-        'numInferenceSteps': 30,
-        'guidanceScale': 8.0,
-        'width': 512,
-        'height': 512,
-        'maxSequenceLength': 77,  # CLIP hard limit
-        'negativePromptMode': 'normal',
-      },
-      'img2img': {
-        'strength': 0.20,
-        'numInferenceSteps': 30,
-        'guidanceScale': 6.0,
-        'maxSequenceLength': 77,
-      },
-    },
-    # SDXL Base
-    'sd-xl-base': {
-      'repo': 'stabilityai/stable-diffusion-xl-base-1.0',
-      'txtPipeline': StableDiffusionXLPipeline,
-      'imgPipeline': StableDiffusionXLImg2ImgPipeline,
-      'dtype': torch.float32,  # matches your original script
-      'useCpuOffload': False,
-      'txt2img': {
-        'numInferenceSteps': 30,
-        'guidanceScale': 8.0,
-        'width': 1024,
-        'height': 1024,
-        'negativePromptMode': 'normal',
-      },
-      'img2img': {
-        'strength': 0.20,
-        'numInferenceSteps': 30,
-        'guidanceScale': 6.0,
-      },
-    },
-    # # SD3.5 Medium
-    'sd3.5-medium': {
-      'repo': 'stabilityai/stable-diffusion-3.5-medium',
-      'txtPipeline': StableDiffusion3Pipeline,
-      'imgPipeline': StableDiffusion3Img2ImgPipeline,
-      'dtype': torch.float16,
-      'useCpuOffload': True,  # safer default on MPS.
-      'txt2img': {
-        'numInferenceSteps': 30,
-        'guidanceScale': 7.0,
-        'width': 512,
-        'height': 512,
-        'maxSequenceLength': 128,  # Set higher to allow longer prompts.
-      },
-      'img2img': {
-        'strength': 0.20,
-        'numInferenceSteps': 30,
-        'guidanceScale': 6.0,
-        'maxSequenceLength': 128,
-      },
-    },
-    # # SD3.5 Large
-    'sd3.5-large': {
-      'repo': 'stabilityai/stable-diffusion-3.5-large',
-      'txtPipeline': StableDiffusion3Pipeline,
-      'imgPipeline': StableDiffusion3Img2ImgPipeline,
-      'dtype': torch.float16,
-      'useCpuOffload': False,  # safer default on MPS.
-      'txt2img': {
-        'numInferenceSteps': 30,
-        'guidanceScale': 7.0,
-        'width': 512,
-        'height': 512,
-        'maxSequenceLength': 128,  # Set higher to allow longer prompts.
-      },
-      'img2img': {
-        'strength': 0.20,
-        'numInferenceSteps': 30,
-        'guidanceScale': 6.0,
-        'maxSequenceLength': 128,
-      },
-    },
-    # PixArt-Σ XL model
-    'pixart-sigma': {
-      'repo': 'PixArt-alpha/PixArt-Sigma-XL-2-1024-MS',
-      'txtPipeline': PixArtSigmaPipeline,
-      'imgPipeline': StableDiffusionXLImg2ImgPipeline,
-      'imgRepo': 'stabilityai/stable-diffusion-xl-refiner-1.0',
-      'dtype': torch.float16,
-      'useCpuOffload': True,
-      'txt2img': {
-        'numInferenceSteps': 30,
-        'guidanceScale': 7.0,
-        'width': 1024,
-        'height': 1024,
-        'maxSequenceLength': 256,
-        'negativePromptMode': 'empty',  # PixArt-Sigma expects ""
-      },
-      'img2img': {
-        'strength': 0.20,
-        'numInferenceSteps': 30,
-        'guidanceScale': 6.0,
-      },
-    },
-    # PixArt-Σ 512
-    'pixart-sigma-512': {
-      'repo': 'Jingya/pixart_sigma_pipe_xl_2_512_ms',
-      'txtPipeline': PixArtSigmaPipeline,
-      'imgPipeline': StableDiffusionXLImg2ImgPipeline,
-      'imgRepo': 'stabilityai/stable-diffusion-xl-refiner-1.0',
-      'dtype': torch.float16,
-      'useCpuOffload': True,
-      'txt2img': {
-        'numInferenceSteps': 25,
-        'guidanceScale': 6.0,
-        'width': 512,
-        'height': 512,
-        'maxSequenceLength': 256,
-        'negativePromptMode': 'empty',  # PixArt-Sigma expects ""
-      },
-      'img2img': {
-        'strength': 0.20,
-        'numInferenceSteps': 20,
-        'guidanceScale': 5.5,
-      },
-    },
-    # # PixArt-α 512
-    'pixart-alpha-512': {
-      'repo': 'PixArt-alpha/PixArt-XL-2-512x512',
-      'txtPipeline': PixArtAlphaPipeline,
-      'imgPipeline': None,
-      'imgRepo': '',
-      'dtype': torch.float16,
-      'useCpuOffload': True,
-      'txt2img': {
-        'numInferenceSteps': 25,
-        'guidanceScale': 6.0,
-        'width': 512,
-        'height': 512,
-        'maxSequenceLength': 256,
-      },
-      'img2img': {
-        'strength': 0.20,
-        'numInferenceSteps': 20,
-        'guidanceScale': 5.5,
-      },
-    },
-  }
+  models: dict[str, dict[str, Any]] = getImageModels()
 
   # Print out the models thi is configured to utilize. (Dump MODELS dict)
   if args.listModels:
-    printUsageAndExit(exitCode=0, models=MODELS)
+    printUsageAndExit(exitCode=0, models=models)
 
   # Ensure the model is in the dict.
-  if args.modelName not in MODELS:
+  if args.modelName not in models:
     print(f"[!] Unknown model '{args.modelName}'. Available models:")
 
-    for keyName in sorted(MODELS.keys()):
+    for keyName in sorted(models.keys()):
       extra = ''
 
-      if MODELS[keyName].get('disabledReason'):
-        extra = f' (disabled: {MODELS[keyName]["disabledReason"]})'
+      if models[keyName].get('disabledReason'):
+        extra = f' (disabled: {models[keyName]["disabledReason"]})'
 
       print(f'  - {keyName}{extra}')
 
     sys.exit(2)
 
-  cfg: dict[str, Any] = MODELS[args.modelName]
+  cfg: dict[str, Any] = models[args.modelName]
   if cfg.get('disabledReason'):
     print(f"[!] Model '{args.modelName}' is currently disabled: {cfg['disabledReason']}")
     sys.exit(2)
@@ -319,171 +159,24 @@ def main() -> None:
   print(f'[+] Using model: {args.modelName}')
   print(f'[+] Output file: {outputFile}\n')
 
-  # Build text to image pipelines.
   txtPipelineClass = cfg['txtPipeline']
   if txtPipelineClass is None:
     print(f"[!] Model '{args.modelName}' has no txtPipeline configured.")
     sys.exit(2)
 
   try:
-    txtPipe = txtPipelineClass.from_pretrained(
-      cfg['repo'],
-      cache_dir=MODEL_DIR,
-      torch_dtype=cfg['dtype'],
-      token=hfToken,
+    generateImageFromPromptData(
+      modelCfg=cfg,
+      promptData=promptData,
+      outputFile=outputFile,
+      inputImage=inputImage,
+      hfToken=hfToken,
     )
-
-  # If it is a gated repo and authentication fails report and exit.
-  except GatedRepoError:
-    print(f"[!] Access denied for gated model: {cfg['repo']}")
-    print("[!] Visit the model page, request/accept access, then rerun.")
+  except GatedRepoError as ex:
+    gatedRepoId: str = getattr(ex, 'repoId', cfg['repo'])
+    print(f'[!] Access denied for gated model: {gatedRepoId}')
+    print('[!] Visit the model page, request/accept access, then rerun.')
     sys.exit(2)
-
-  # SD3 docs strongly suggest offloading for commodity hardware; keep it dict-controlled.
-  # For MPS, offload can help memory but may trade speed and requires accelerate.
-  if cfg.get('useCpuOffload'):
-    try:
-      txtPipe.enable_model_cpu_offload()
-      print('[+] Enabled model CPU offload')
-
-    except Exception as ex:
-      print(f'[!] Failed to enable CPU offload: {ex}')
-
-  txtPipe.safety_checker = None
-  txtPipe.set_progress_bar_config(disable=False)
-
-  # If we didn't enable CPU offload, move to device normally.
-  if not cfg.get('useCpuOffload'):
-    txtPipe = txtPipe.to(deviceType)
-
-  # Create SD3 img2img pipeline from the same checkpoint (avoids AutoPipeline import issues)
-  # Build img2img pipeline (dict-driven; may be None)
-  imgPipelineClass = cfg.get('imgPipeline')
-  imgPipe = None
-
-  if imgPipelineClass is not None:
-    # If using a model that doesn't have it's own image to image we can sub in another pipeline
-    imgRepo: str = cfg.get('imgRepo', cfg['repo'])
-
-    try:
-      imgPipe = imgPipelineClass.from_pretrained(
-        imgRepo,
-        cache_dir=MODEL_DIR,
-        torch_dtype=cfg['dtype'],
-        token=hfToken,
-      )
-
-    # If we are a gated repo and authentication fails, report and exit.
-    except GatedRepoError:
-      print(f'[!] Access denied for gated model: {imgRepo}')
-      print('[!] Visit the model page, request/accept access, then rerun.')
-      sys.exit(2)
-
-    # Set CPU offload if requested and available.
-    if cfg.get('useCpuOffload'):
-      try:
-        imgPipe.enable_model_cpu_offload()
-        print('[+] Enabled img2img model CPU offload')
-
-      except Exception as ex:
-        print(f'[!] Failed to enable img2img CPU offload: {ex}')
-
-    # Disable safety and be sure we get progress bars for progress tracking
-    imgPipe.safety_checker = None
-    imgPipe.set_progress_bar_config(disable=False)
-
-    if not cfg.get('useCpuOffload'):
-      imgPipe = imgPipe.to(deviceType)
-
-  # Stage 1: Text -> Image
-  promptText: str = genPromptString(promptData.get('prompt', []))
-  negativePromptText: str = genPromptString(promptData.get('exclude', []))
-
-  # Set up configurations for text -> image generation.
-  txtCfg: dict[str, Any] = cfg['txt2img']
-  txtArgs: dict[str, Any] = {
-    'prompt': promptText,
-    'num_inference_steps': txtCfg['numInferenceSteps'],
-    'guidance_scale': txtCfg['guidanceScale'],
-    'width': txtCfg['width'],
-    'height': txtCfg['height'],
-  }
-
-  # Set max token length if specified in the configruation.
-  if 'maxSequenceLength' in txtCfg:
-    txtArgs['max_sequence_length'] = txtCfg['maxSequenceLength']
-
-  # Default negativePromptMode to normal if it is not in the dict.
-  negativePromptMode: str = txtCfg.get('negativePromptMode', 'normal')
-
-  # Empty value for the negative prompt form models where it is recommended.
-  if negativePromptMode == 'empty':
-    txtArgs['negative_prompt'] = ''
-
-  # Leave the negativePrompt out alltogether for models that do not support it.
-  elif negativePromptMode == 'omit':
-    pass
-
-  # Bring in the negative prompt if provided and allowed.
-  else:
-    if negativePromptText:
-      txtArgs['negative_prompt'] = negativePromptText
-
-  image: Image.Image | None = None
-  if inputImage is not None:
-    image: Image.Image = inputImage
-    print('[+] Skipping txt2img stage (input image provided).')
-
-  else:
-    image: Image.Image = txtPipe(**txtArgs).images[0]
-
-  # Process second stage image to image prompt
-  refinePrompt: str = genPromptString(promptData.get('refine prompt', []))
-  refineNegativePrompt: str = genPromptString(promptData.get('refine exclude', []))
-
-  # If an external input image is supplied and no refine prompt exists,
-  # fall back to the base prompt so img2img still runs.
-  if inputImage is not None and not refinePrompt:
-    refinePrompt: str = promptText
-
-  # Same logic for negative prompts
-  if inputImage is not None and not refineNegativePrompt:
-    refineNegativePrompt: str = negativePromptText
-
-  refinedImage = None
-  if not refinePrompt:
-    print('[+] No refine prompt found; skipping refine stage.')
-
-  elif imgPipe is None:
-    print('[+] No img2img pipeline configured for this model; skipping refine stage.')
-
-  else:
-    print('[+] Refining image...')
-    imgCfg: dict[str, Any] = cfg['img2img']
-
-    imgArgs: dict[str, Any] = {
-      'prompt': refinePrompt,
-      'image': image,
-      'strength': imgCfg['strength'],
-      'num_inference_steps': imgCfg['numInferenceSteps'],
-      'guidance_scale': imgCfg['guidanceScale'],
-    }
-
-    if 'maxSequenceLength' in imgCfg:
-      imgArgs['max_sequence_length'] = imgCfg['maxSequenceLength']
-
-    # Prefer refine negatives, else fall back to base negatives
-    if refineNegativePrompt:
-      imgArgs['negative_prompt'] = refineNegativePrompt
-
-    elif negativePromptText:
-      imgArgs['negative_prompt'] = negativePromptText
-
-    refinedImage: Image.Image = imgPipe(**imgArgs).images[0]
-
-  # Save final output only
-  finalImage: Image.Image = refinedImage if refinedImage is not None else image
-  finalImage.save(outputFile)
 
   print(f'\n[+] Image saved to: {outputFile}\n')
 

@@ -16,13 +16,22 @@ from __future__ import annotations
 
 import torch
 
+from .textRuntime import selectTorchDevice
+
 
 def checkGpu() -> None:
-  isCudaAvailable = torch.cuda.is_available()
+  isCudaAvailable: bool = torch.cuda.is_available()
   print(f"CUDA available: {isCudaAvailable}")
 
   if isCudaAvailable:
-    deviceIndex = torch.cuda.current_device()
-    deviceName = torch.cuda.get_device_name(deviceIndex)
+    deviceIndex: int = torch.cuda.current_device()
+    deviceName: str = torch.cuda.get_device_name(deviceIndex)
     print(f"CUDA device index: {deviceIndex}")
     print(f"CUDA device name: {deviceName}")
+
+  isMpsAvailable: bool = bool(hasattr(torch.backends, "mps") and torch.backends.mps.is_available())
+  print(f"MPS available: {isMpsAvailable}")
+
+  (selectedDevice, selectedDtype) = selectTorchDevice()
+  print(f"Selected device: {selectedDevice}")
+  print(f"Selected dtype: {selectedDtype}")

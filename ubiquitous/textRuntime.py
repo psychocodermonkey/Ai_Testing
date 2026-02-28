@@ -23,6 +23,37 @@ from .hfAuth import hfLogin
 from .paths import MODEL_DIR
 
 
+def _isMpsAvailable() -> bool:
+  if not hasattr(torch.backends, "mps"):
+    return False
+  return bool(torch.backends.mps.is_available())
+
+
+def selectTorchDevice() -> tuple[str, torch.dtype]:
+  if torch.cuda.is_available():
+    return ("cuda", torch.float16)
+  if _isMpsAvailable():
+    return ("mps", torch.float16)
+  return ("cpu", torch.float32)
+
+
+def _selectForcedDevice(forceDevice: str) -> tuple[str, torch.dtype]:
+  if forceDevice == "cuda":
+    if not torch.cuda.is_available():
+      raise ValueError("forceDevice='cuda' requested but CUDA is not available")
+    return ("cuda", torch.float16)
+
+  if forceDevice == "mps":
+    if not _isMpsAvailable():
+      raise ValueError("forceDevice='mps' requested but MPS is not available")
+    return ("mps", torch.float16)
+
+  if forceDevice == "cpu":
+    return ("cpu", torch.float32)
+
+  raise ValueError("forceDevice must be one of: 'cuda', 'mps', 'cpu'")
+
+
 class TextModelWrapper:
   def __init__(
     self,
@@ -101,8 +132,11 @@ def loadTextModel(modelConfig: dict[str, Any]) -> TextModelWrapper:
     raise ValueError("Model config must include 'repo' or 'modelId'")
 
   token = hfLogin()
-  device = "cuda" if torch.cuda.is_available() else "cpu"
-  dtype = torch.float16 if device == "cuda" else torch.float32
+  forceDevice = modelConfig.get("forceDevice")
+  if forceDevice is None:
+    (device, dtype) = selectTorchDevice()
+  else:
+    (device, dtype) = _selectForcedDevice(str(forceDevice))
 
   tokenizer = AutoTokenizer.from_pretrained(
     modelId,
@@ -114,7 +148,10 @@ def loadTextModel(modelConfig: dict[str, Any]) -> TextModelWrapper:
     cache_dir=str(MODEL_DIR),
     token=token,
     torch_dtype=dtype,
-  ).to(device)
+    low_cpu_mem_usage=True,
+  )
+  model = model.to(device)
+  model.eval()
 
   return TextModelWrapper(
     model=model,

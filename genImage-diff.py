@@ -71,8 +71,8 @@ from typing import Any, Literal
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
-from Ubiquitous import MODEL_DIR, OUTPUT_DIR
-from Ubiquitous import genPromptString, hfLogin, loadPrompt
+from ubiquitous import MODEL_DIR, OUTPUT_DIR
+from ubiquitous import genPromptString, hfLogin, loadPrompt
 
 
 def main() -> None:

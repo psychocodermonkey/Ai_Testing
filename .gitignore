@@ -187,6 +187,11 @@ cython_debug/
 .DS_Store
 Desktop.ini
 
+# AI instructive files
+.agents
+.agents.md
+AGENTS.md
+
 # Skip prompt files
 *.prompt
 !saved.prompt

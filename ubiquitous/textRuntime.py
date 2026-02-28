@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from .quiet import configureQuietMode
 
 from .hfAuth import hfLogin
 from .paths import MODEL_DIR
@@ -127,6 +127,11 @@ class TextModelWrapper:
 
 
 def loadTextModel(modelConfig: dict[str, Any]) -> TextModelWrapper:
+  isVerbose = bool(modelConfig.get("isVerbose", False))
+  configureQuietMode(isVerbose=isVerbose)
+
+  from transformers import AutoModelForCausalLM, AutoTokenizer
+
   modelId = modelConfig.get("repo") or modelConfig.get("modelId")
   if not modelId:
     raise ValueError("Model config must include 'repo' or 'modelId'")

@@ -21,6 +21,7 @@ import torch
 
 from .paths import MODEL_DIR
 from .prompts import genPromptString
+from .quiet import configureQuietMode
 
 
 def _attachRepoIdAndRaise(gatedError: Exception, repoId: str) -> None:
@@ -185,7 +186,10 @@ def generateImageFromPromptData(
   outputFile: Path,
   inputImage: Any | None,
   hfToken: str | None,
+  isVerbose: bool = False,
 ) -> Path:
+  configureQuietMode(isVerbose=isVerbose)
+
   txtPipe = buildTxtPipeline(modelCfg=modelCfg, hfToken=hfToken)
   imgPipe = buildImgPipeline(modelCfg=modelCfg, hfToken=hfToken)
 

@@ -7,6 +7,7 @@ from .imageModels import getImageModels
 from .imageRuntime import generateImageFromPromptData
 from .paths import DATA_DIR, MODEL_DIR, OUTPUT_DIR, getModelDir, getOutputDir, getUserDataDir
 from .prompts import genPromptString, loadPrompt
+from .quiet import configureQuietMode
 from .textRuntime import TextModelWrapper, loadTextModel
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
   "getModel",
   "getImageModels",
   "generateImageFromPromptData",
+  "configureQuietMode",
   "loadPrompt",
   "genPromptString",
   "TextModelWrapper",

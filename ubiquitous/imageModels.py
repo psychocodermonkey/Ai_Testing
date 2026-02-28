@@ -183,8 +183,13 @@ def _buildModels() -> dict[str, dict[str, Any]]:
   }
 
 
-MODELS: dict[str, dict[str, Any]] = _buildModels()
+_modelsCache: dict[str, dict[str, Any]] | None = None
 
 
 def getImageModels() -> dict[str, dict[str, Any]]:
-  return MODELS
+  global _modelsCache
+
+  if _modelsCache is None:
+    _modelsCache = _buildModels()
+
+  return _modelsCache

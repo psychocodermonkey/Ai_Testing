@@ -16,13 +16,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from huggingface_hub import hf_hub_download
-
 from .hfAuth import hfLogin
 from .paths import MODEL_DIR
 
 
 def getModel(repoId: str, fileName: str, override: bool = False) -> Path | None:
+  from huggingface_hub import hf_hub_download
+
   if not repoId or not fileName:
     return None
 

@@ -24,6 +24,35 @@ from .prompts import genPromptString
 from .quiet import configureQuietMode
 
 
+def _isMpsAvailable() -> bool:
+  return hasattr(torch.backends, "mps") and bool(torch.backends.mps.is_available())
+
+
+def selectImageDevice() -> str:
+  if torch.cuda.is_available():
+    return "cuda"
+  if _isMpsAvailable():
+    return "mps"
+  return "cpu"
+
+
+def _selectForcedImageDevice(forceDevice: str) -> str:
+  if forceDevice == "cuda":
+    if not torch.cuda.is_available():
+      raise ValueError("forceDevice='cuda' requested but CUDA is not available")
+    return "cuda"
+
+  if forceDevice == "mps":
+    if not _isMpsAvailable():
+      raise ValueError("forceDevice='mps' requested but MPS is not available")
+    return "mps"
+
+  if forceDevice == "cpu":
+    return "cpu"
+
+  raise ValueError("forceDevice must be one of: 'cuda', 'mps', 'cpu'")
+
+
 def _attachRepoIdAndRaise(gatedError: Exception, repoId: str) -> None:
   setattr(gatedError, 'repoId', repoId)
   raise gatedError
@@ -55,7 +84,12 @@ def buildTxtPipeline(modelCfg: dict[str, Any], hfToken: str | None) -> Any:
   txtPipe.safety_checker = None
   txtPipe.set_progress_bar_config(disable=False)
 
-  deviceType = 'mps' if torch.backends.mps.is_available() else 'cpu'
+  forceDevice = modelCfg.get('forceDevice')
+  if forceDevice is None:
+    deviceType = selectImageDevice()
+  else:
+    deviceType = _selectForcedImageDevice(str(forceDevice))
+
   if not modelCfg.get('useCpuOffload'):
     txtPipe = txtPipe.to(deviceType)
 
@@ -93,7 +127,12 @@ def buildImgPipeline(modelCfg: dict[str, Any], hfToken: str | None) -> Any | Non
   imgPipe.safety_checker = None
   imgPipe.set_progress_bar_config(disable=False)
 
-  deviceType = 'mps' if torch.backends.mps.is_available() else 'cpu'
+  forceDevice = modelCfg.get('forceDevice')
+  if forceDevice is None:
+    deviceType = selectImageDevice()
+  else:
+    deviceType = _selectForcedImageDevice(str(forceDevice))
+
   if not modelCfg.get('useCpuOffload'):
     imgPipe = imgPipe.to(deviceType)
 

@@ -27,18 +27,18 @@ def getUserDataDir() -> Path:
   systemName = platform.system()
 
   if systemName == "Darwin":
-    return Path.home() / "Library" / "Application Support" / "com.psychocodermonkey.dev"
+    return Path.home() / "Library" / "Application Support" / "dev.psychocodermonkey"
 
   if systemName == "Windows":
     localAppData = os.getenv("LOCALAPPDATA")
     if localAppData:
       return Path(localAppData) / "com.psychocodermonkey.dev"
-    return Path.home() / "AppData" / "Local" / "com.psychocodermonkey.dev"
+    return Path.home() / "AppData" / "Local" / "dev.psychocodermonkey"
 
   xdgDataHome = os.getenv("XDG_DATA_HOME")
   if xdgDataHome:
     return Path(xdgDataHome) / "com.psychocodermonkey.dev"
-  return Path.home() / ".local" / "share" / "com.psychocodermonkey.dev"
+  return Path.home() / ".local" / "share" / "dev.psychocodermonkey"
 
 
 def _enforceGitignore(dirPath: Path) -> None:
